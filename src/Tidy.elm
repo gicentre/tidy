@@ -127,12 +127,13 @@ fromCSV =
         addEntry xs =
             case xs of
                 hd :: tl ->
-                    Dict.insert hd tl
+                    Dict.insert (String.trim hd) (List.map String.trim tl)
 
                 _ ->
                     identity
     in
     String.split "\n"
+        >> List.filter (not << String.isEmpty)
         >> List.map (String.split ",")
         >> transpose
         >> List.foldl addEntry Dict.empty
