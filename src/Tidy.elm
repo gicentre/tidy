@@ -8,6 +8,7 @@ module Tidy exposing
     , innerJoin
     , outerJoin
     , filterRows
+    , filterColumns
     , toColumn
     , numColumn
     , strColumn
@@ -79,6 +80,7 @@ table2:
 ## Table Filtering
 
 @docs filterRows
+@docs filterColumns
 
 
 ## Column coversion
@@ -197,7 +199,6 @@ be ignored and not provided in the resulting list.
 boolColumn : String -> Table -> List Bool
 boolColumn colName =
     let
-        toBool : String -> Maybe Bool
         toBool str =
             case String.toLower str of
                 "true" ->
@@ -373,8 +374,8 @@ melt columnName valueName colVars table =
 
 {-| Keep rows in the table where the values in the given column satisfy the given
 test. The test should be a function that takes a string representing the cell value
-and returns either true or false depending on whether the row containing that value
-in the column should be retained.
+and returns either `True` or `False` depending on whether the row containing that
+value in the column should be retained.
 
     isWarm : String -> Bool
     isWarm s =
@@ -408,7 +409,6 @@ filterRows columnName fn tbl =
                     List.indexedMap predicate values
                         |> List.filter (\n -> n /= -1)
 
-        filterFromCol : String -> List String -> List String
         filterFromCol key val =
             val
                 |> List.indexedMap Tuple.pair
@@ -416,6 +416,18 @@ filterRows columnName fn tbl =
                 |> List.map Tuple.second
     in
     Dict.map filterFromCol tbl
+
+
+{-| Keep columns in the table whose names satisfy the given test. The test should
+be a function that takes a string representing the column name and returns either
+`True` or `False` depending on whether the column should be retained.
+
+    myTable |> filterColumns ((==) "temperature2017")
+
+-}
+filterColumns : (String -> Bool) -> Table -> Table
+filterColumns fn tbl =
+    Dict.filter (\k _ -> fn k) tbl
 
 
 {-| A _left join_ preserves all the values in the first table and adds any key-matched
@@ -439,7 +451,6 @@ would generate
 leftJoin : ( Table, String ) -> ( Table, String ) -> Table
 leftJoin ( t1, k1 ) ( t2, k2 ) =
     let
-        keyCol : String -> Dict String String
         keyCol colLabel =
             case ( Dict.get k2 t2, Dict.get colLabel t2 ) of
                 ( Just ks, Just vs ) ->
@@ -448,12 +459,10 @@ leftJoin ( t1, k1 ) ( t2, k2 ) =
                 _ ->
                     Dict.empty
 
-        tableCol : String -> List String
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
                 (Dict.get k1 t1 |> Maybe.withDefault [])
 
-        leftInsert : String -> Table -> Table
         leftInsert label2 table =
             if Dict.member label2 table then
                 table
@@ -504,7 +513,6 @@ would generate
 innerJoin : ( Table, String ) -> ( Table, String ) -> Table
 innerJoin ( t1, k1 ) ( t2, k2 ) =
     let
-        keyCol : String -> Dict String String
         keyCol colLabel =
             case ( Dict.get k2 t2, Dict.get colLabel t2 ) of
                 ( Just ks, Just vs ) ->
@@ -513,7 +521,6 @@ innerJoin ( t1, k1 ) ( t2, k2 ) =
                 _ ->
                     Dict.empty
 
-        tableCol : String -> List String
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
                 (Dict.get k1 t1 |> Maybe.withDefault [])
