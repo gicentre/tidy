@@ -5070,7 +5070,8 @@ var author$project$Tidy$fromCSV = function () {
 					A2(elm$core$List$foldl, addEntry, elm$core$Dict$empty)))));
 }();
 var author$project$WickhamExamples$messy1 = author$project$Tidy$fromCSV('Person,treatmenta,treatmentb\nJohn Smith, , 2\nJane Doe, 16, 11\nMary Johnson, 3,\n');
-var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nReligion,income0-10k,income10-20k,income20-30k,income30-40k,income40-50k,income50-75k\nAgnostic,27,34,60,81,76,137\nAtheist,12,27,37,52,35,70\nBuddhist,27,21,30,34,33,58\nCatholic,418,617,732,670,638,1116\nDon\'t know/refused,15,14,15,11,10,35\nEvangelical Prot,575,869,1064,982,881,1486\nHindu,1,9,7,9,11,34\nHistorically Black Prot,228,224,236,238,197,223\nJehovah\'s Witness,20,27,24,24,21,30\nJewish,19,19,25,25,30,95\n');
+var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nReligion,income0-10k,income10-20k,income20-30k,income30-40k,income40-50k,income50-75k\nAgnostic,                 27,  34,   60,  81,  76,  137\nAtheist,                  12,  27,   37,  52,  35,   70\nBuddhist,                 27,  21,   30,  34,  33,   58\nCatholic,                418, 617,  732, 670, 638, 1116\nDon\'t know/refused,       15,  14,   15,  11,  10,   35\nEvangelical Prot,        575, 869, 1064, 982, 881, 1486\nHindu,                     1,   9,    7,   9,  11,   34\nHistorically Black Prot, 228, 224,  236, 238, 197,  223\nJehovah\'s Witness,        20,  27,   24,  24,  21,   30\nJewish,                   19,  19,   25,  25,  30,   95\n');
+var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear, artist,        track,                  time, date.entered, wk1, wk2, wk3\n2000, 2 Pac,         Baby Don\'t Cry,         4:22, 2000-02-26,   87,  82,  72\n2000, 2Ge+her,       The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92\n2000, 3 Doors Down,  Kryptonite,             3:15, 2000-04-08,   81,  70,  68\n2000, 98^0,          Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34\n2000, A*Teens,       Dancing Queen,          3:44, 2000-07-08,   97,  97,  96\n2000, Aaliyah,       I Don\'t Wanna,          4:15, 2000-01-29,   84,  62,  51\n2000, Aaliyah,       Try Again,              4:03, 2000-03-18,   59,  53,  38\n2000, Yolanda Adams, Open My Heart,          5:30, 2000-08-26,   76,  76,  74\n');
 var elm$core$Dict$foldl = F3(
 	function (func, acc, dict) {
 		foldl:
@@ -5378,7 +5379,7 @@ var author$project$WickhamExamples$tidy3 = A4(
 var author$project$WickhamExamples$tidy6 = A4(
 	author$project$Tidy$melt,
 	'Income',
-	'frequency',
+	'freq',
 	_List_fromArray(
 		[
 			_Utils_Tuple2('income0-10k', '$0-10k'),
@@ -5389,6 +5390,42 @@ var author$project$WickhamExamples$tidy6 = A4(
 			_Utils_Tuple2('income50-75k', '$50-75k')
 		]),
 	author$project$WickhamExamples$messy4);
+var elm$core$Dict$filter = F2(
+	function (isGood, dict) {
+		return A3(
+			elm$core$Dict$foldl,
+			F3(
+				function (k, v, d) {
+					return A2(isGood, k, v) ? A3(elm$core$Dict$insert, k, v, d) : d;
+				}),
+			elm$core$Dict$empty,
+			dict);
+	});
+var author$project$Tidy$filterColumns = F2(
+	function (fn, tbl) {
+		return A2(
+			elm$core$Dict$filter,
+			F2(
+				function (k, _n0) {
+					return fn(k);
+				}),
+			tbl);
+	});
+var elm$core$Basics$neq = _Utils_notEqual;
+var author$project$WickhamExamples$tidy8 = A2(
+	author$project$Tidy$filterColumns,
+	elm$core$Basics$neq('date.entered'),
+	A4(
+		author$project$Tidy$melt,
+		'week',
+		'rank',
+		_List_fromArray(
+			[
+				_Utils_Tuple2('wk1', '1'),
+				_Utils_Tuple2('wk2', '2'),
+				_Utils_Tuple2('wk3', '3')
+			]),
+		author$project$WickhamExamples$messy7));
 var elm$core$String$join = F2(
 	function (sep, chunks) {
 		return A2(
@@ -5818,7 +5855,25 @@ var author$project$WickhamExamples$view = function (model) {
 						elm$html$Html$text('Tidy Table 6')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy6))
+				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy6)),
+				A2(
+				elm$html$Html$h2,
+				_List_Nil,
+				_List_fromArray(
+					[
+						elm$html$Html$text('Messy Table 7')
+					])),
+				author$project$WickhamExamples$toHtml(
+				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$messy7)),
+				A2(
+				elm$html$Html$h2,
+				_List_Nil,
+				_List_fromArray(
+					[
+						elm$html$Html$text('Tidy Table 8')
+					])),
+				author$project$WickhamExamples$toHtml(
+				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy8))
 			]));
 };
 var elm$core$Platform$Cmd$batch = _Platform_batch;
