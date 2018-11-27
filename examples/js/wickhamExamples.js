@@ -600,11 +600,11 @@ function _Debug_crash_UNUSED(identifier, fact1, fact2, fact3, fact4)
 
 function _Debug_regionToString(region)
 {
-	if (region.K.z === region.P.z)
+	if (region.K.z === region.Q.z)
 	{
 		return 'on line ' + region.K.z;
 	}
-	return 'on lines ' + region.K.z + ' through ' + region.P.z;
+	return 'on lines ' + region.K.z + ' through ' + region.Q.z;
 }
 
 
@@ -1162,6 +1162,107 @@ function _String_fromList(chars)
 	return _List_toArray(chars).join('');
 }
 
+
+
+// CREATE
+
+var _Regex_never = /.^/;
+
+var _Regex_fromStringWith = F2(function(options, string)
+{
+	var flags = 'g';
+	if (options.W) { flags += 'm'; }
+	if (options.N) { flags += 'i'; }
+
+	try
+	{
+		return elm$core$Maybe$Just(new RegExp(string, flags));
+	}
+	catch(error)
+	{
+		return elm$core$Maybe$Nothing;
+	}
+});
+
+
+// USE
+
+var _Regex_contains = F2(function(re, string)
+{
+	return string.match(re) !== null;
+});
+
+
+var _Regex_findAtMost = F3(function(n, re, str)
+{
+	var out = [];
+	var number = 0;
+	var string = str;
+	var lastIndex = re.lastIndex;
+	var prevLastIndex = -1;
+	var result;
+	while (number++ < n && (result = re.exec(string)))
+	{
+		if (prevLastIndex == re.lastIndex) break;
+		var i = result.length - 1;
+		var subs = new Array(i);
+		while (i > 0)
+		{
+			var submatch = result[i];
+			subs[--i] = submatch
+				? elm$core$Maybe$Just(submatch)
+				: elm$core$Maybe$Nothing;
+		}
+		out.push(A4(elm$regex$Regex$Match, result[0], result.index, number, _List_fromArray(subs)));
+		prevLastIndex = re.lastIndex;
+	}
+	re.lastIndex = lastIndex;
+	return _List_fromArray(out);
+});
+
+
+var _Regex_replaceAtMost = F4(function(n, re, replacer, string)
+{
+	var count = 0;
+	function jsReplacer(match)
+	{
+		if (count++ >= n)
+		{
+			return match;
+		}
+		var i = arguments.length - 3;
+		var submatches = new Array(i);
+		while (i > 0)
+		{
+			var submatch = arguments[i];
+			submatches[--i] = submatch
+				? elm$core$Maybe$Just(submatch)
+				: elm$core$Maybe$Nothing;
+		}
+		return replacer(A4(elm$regex$Regex$Match, match, arguments[arguments.length - 2], count, _List_fromArray(submatches)));
+	}
+	return string.replace(re, jsReplacer);
+});
+
+var _Regex_splitAtMost = F3(function(n, re, str)
+{
+	var string = str;
+	var out = [];
+	var start = re.lastIndex;
+	var restoreLastIndex = re.lastIndex;
+	while (n--)
+	{
+		var result = re.exec(string);
+		if (!result) break;
+		out.push(string.slice(start, result.index));
+		start = re.lastIndex;
+	}
+	out.push(string.slice(start));
+	re.lastIndex = restoreLastIndex;
+	return _List_fromArray(out);
+});
+
+var _Regex_infinity = Infinity;
 
 
 
@@ -1857,9 +1958,9 @@ var _Platform_worker = F4(function(impl, flagDecoder, debugMetadata, args)
 	return _Platform_initialize(
 		flagDecoder,
 		args,
-		impl.au,
-		impl.aF,
-		impl.aC,
+		impl.ax,
+		impl.aL,
+		impl.aI,
 		function() { return function() {} }
 	);
 });
@@ -3944,9 +4045,9 @@ function _Markdown_formatOptions(options)
 {
 	function toHighlight(code, lang)
 	{
-		if (!lang && elm$core$Maybe$isJust(options.an))
+		if (!lang && elm$core$Maybe$isJust(options.ap))
 		{
-			lang = options.an.a;
+			lang = options.ap.a;
 		}
 
 		if (typeof hljs !== 'undefined' && lang && hljs.listLanguages().indexOf(lang) >= 0)
@@ -3957,15 +4058,15 @@ function _Markdown_formatOptions(options)
 		return code;
 	}
 
-	var gfm = options.ar.a;
+	var gfm = options.at.a;
 
 	return {
 		highlight: toHighlight,
 		gfm: gfm,
-		tables: gfm && gfm.aD,
-		breaks: gfm && gfm.al,
-		sanitize: options.aA,
-		smartypants: options.aB
+		tables: gfm && gfm.aJ,
+		breaks: gfm && gfm.an,
+		sanitize: options.aF,
+		smartypants: options.aG
 	};
 }
 
@@ -3982,11 +4083,11 @@ var _Browser_element = _Debugger_element || F4(function(impl, flagDecoder, debug
 	return _Platform_initialize(
 		flagDecoder,
 		args,
-		impl.au,
-		impl.aF,
-		impl.aC,
+		impl.ax,
+		impl.aL,
+		impl.aI,
 		function(sendToApp, initialModel) {
-			var view = impl.aH;
+			var view = impl.aN;
 			/**/
 			var domNode = args['node'];
 			//*/
@@ -4018,12 +4119,12 @@ var _Browser_document = _Debugger_document || F4(function(impl, flagDecoder, deb
 	return _Platform_initialize(
 		flagDecoder,
 		args,
-		impl.au,
-		impl.aF,
-		impl.aC,
+		impl.ax,
+		impl.aL,
+		impl.aI,
 		function(sendToApp, initialModel) {
 			var divertHrefToApp = impl.A && impl.A(sendToApp)
-			var view = impl.aH;
+			var view = impl.aN;
 			var title = _VirtualDom_doc.title;
 			var bodyNode = _VirtualDom_doc.body;
 			var currNode = _VirtualDom_virtualize(bodyNode);
@@ -4031,12 +4132,12 @@ var _Browser_document = _Debugger_document || F4(function(impl, flagDecoder, deb
 			{
 				_VirtualDom_divertHrefToApp = divertHrefToApp;
 				var doc = view(model);
-				var nextNode = _VirtualDom_node('body')(_List_Nil)(doc.ak);
+				var nextNode = _VirtualDom_node('body')(_List_Nil)(doc.am);
 				var patches = _VirtualDom_diff(currNode, nextNode);
 				bodyNode = _VirtualDom_applyPatches(bodyNode, currNode, patches, sendToApp);
 				currNode = nextNode;
 				_VirtualDom_divertHrefToApp = 0;
-				(title !== doc.aE) && (_VirtualDom_doc.title = title = doc.aE);
+				(title !== doc.aK) && (_VirtualDom_doc.title = title = doc.aK);
 			});
 		}
 	);
@@ -4092,8 +4193,8 @@ function _Browser_makeAnimator(model, draw)
 
 function _Browser_application(impl)
 {
-	var onUrlChange = impl.aw;
-	var onUrlRequest = impl.ax;
+	var onUrlChange = impl.aB;
+	var onUrlRequest = impl.aC;
 	var key = function() { key.a(onUrlChange(_Browser_getUrl())); };
 
 	return _Browser_document({
@@ -4113,9 +4214,9 @@ function _Browser_application(impl)
 					var next = elm$url$Url$fromString(href).a;
 					sendToApp(onUrlRequest(
 						(next
-							&& curr.aa === next.aa
-							&& curr.S === next.S
-							&& curr.Y.a === next.Y.a
+							&& curr.ac === next.ac
+							&& curr.T === next.T
+							&& curr._.a === next._.a
 						)
 							? elm$browser$Browser$Internal(next)
 							: elm$browser$Browser$External(href)
@@ -4123,13 +4224,13 @@ function _Browser_application(impl)
 				}
 			});
 		},
-		au: function(flags)
+		ax: function(flags)
 		{
-			return A3(impl.au, flags, _Browser_getUrl(), key);
+			return A3(impl.ax, flags, _Browser_getUrl(), key);
 		},
-		aH: impl.aH,
-		aF: impl.aF,
-		aC: impl.aC
+		aN: impl.aN,
+		aL: impl.aL,
+		aI: impl.aI
 	});
 }
 
@@ -4195,17 +4296,17 @@ var _Browser_decodeEvent = F2(function(decoder, event)
 function _Browser_visibilityInfo()
 {
 	return (typeof _VirtualDom_doc.hidden !== 'undefined')
-		? { as: 'hidden', am: 'visibilitychange' }
+		? { au: 'hidden', ao: 'visibilitychange' }
 		:
 	(typeof _VirtualDom_doc.mozHidden !== 'undefined')
-		? { as: 'mozHidden', am: 'mozvisibilitychange' }
+		? { au: 'mozHidden', ao: 'mozvisibilitychange' }
 		:
 	(typeof _VirtualDom_doc.msHidden !== 'undefined')
-		? { as: 'msHidden', am: 'msvisibilitychange' }
+		? { au: 'msHidden', ao: 'msvisibilitychange' }
 		:
 	(typeof _VirtualDom_doc.webkitHidden !== 'undefined')
-		? { as: 'webkitHidden', am: 'webkitvisibilitychange' }
-		: { as: 'hidden', am: 'visibilitychange' };
+		? { au: 'webkitHidden', ao: 'webkitvisibilitychange' }
+		: { au: 'hidden', ao: 'visibilitychange' };
 }
 
 
@@ -4286,8 +4387,8 @@ var _Browser_call = F2(function(functionName, id)
 function _Browser_getViewport()
 {
 	return {
-		ae: _Browser_getScene(),
-		ah: {
+		ag: _Browser_getScene(),
+		aj: {
 			F: _Browser_window.pageXOffset,
 			G: _Browser_window.pageYOffset,
 			x: _Browser_doc.documentElement.clientWidth,
@@ -4325,11 +4426,11 @@ function _Browser_getViewportOf(id)
 	return _Browser_withNode(id, function(node)
 	{
 		return {
-			ae: {
+			ag: {
 				x: node.scrollWidth,
 				s: node.scrollHeight
 			},
-			ah: {
+			aj: {
 				F: node.scrollLeft,
 				G: node.scrollTop,
 				x: node.clientWidth,
@@ -4363,14 +4464,14 @@ function _Browser_getElement(id)
 		var x = _Browser_window.pageXOffset;
 		var y = _Browser_window.pageYOffset;
 		return {
-			ae: _Browser_getScene(),
-			ah: {
+			ag: _Browser_getScene(),
+			aj: {
 				F: x,
 				G: y,
 				x: _Browser_doc.documentElement.clientWidth,
 				s: _Browser_doc.documentElement.clientHeight
 			},
-			ao: {
+			aq: {
 				F: x + rect.left,
 				G: y + rect.top,
 				x: rect.width,
@@ -4626,12 +4727,12 @@ var elm$core$List$tail = function (list) {
 var author$project$Tidy$transpose = function (listOfLists) {
 	var tails = A2(elm$core$List$filterMap, elm$core$List$tail, listOfLists);
 	var heads = A2(elm$core$List$filterMap, elm$core$List$head, listOfLists);
-	return _Utils_eq(
+	return (!elm$core$List$length(heads)) ? _List_Nil : (_Utils_eq(
 		elm$core$List$length(heads),
 		elm$core$List$length(listOfLists)) ? A2(
 		elm$core$List$cons,
 		heads,
-		author$project$Tidy$transpose(tails)) : _List_Nil;
+		author$project$Tidy$transpose(tails)) : _List_Nil);
 };
 var elm$core$Basics$always = F2(
 	function (a, _n0) {
@@ -5020,6 +5121,11 @@ var elm$core$Dict$insert = F3(
 			return x;
 		}
 	});
+var elm$core$List$concatMap = F2(
+	function (f, list) {
+		return elm$core$List$concat(
+			A2(elm$core$List$map, f, list));
+	});
 var elm$core$List$filter = F2(
 	function (isGood, list) {
 		return A3(
@@ -5031,6 +5137,15 @@ var elm$core$List$filter = F2(
 			_List_Nil,
 			list);
 	});
+var elm$core$Maybe$withDefault = F2(
+	function (_default, maybe) {
+		if (!maybe.$) {
+			var value = maybe.a;
+			return value;
+		} else {
+			return _default;
+		}
+	});
 var elm$core$String$isEmpty = function (string) {
 	return string === '';
 };
@@ -5040,7 +5155,37 @@ var elm$core$String$split = F2(
 			A2(_String_split, sep, string));
 	});
 var elm$core$String$trim = _String_trim;
+var elm$regex$Regex$Match = F4(
+	function (match, index, number, submatches) {
+		return {aw: index, ay: match, aA: number, aH: submatches};
+	});
+var elm$regex$Regex$find = _Regex_findAtMost(_Regex_infinity);
+var elm$core$Basics$False = 1;
+var elm$regex$Regex$fromStringWith = _Regex_fromStringWith;
+var elm$regex$Regex$fromString = function (string) {
+	return A2(
+		elm$regex$Regex$fromStringWith,
+		{N: false, W: false},
+		string);
+};
+var elm$regex$Regex$never = _Regex_never;
 var author$project$Tidy$fromCSV = function () {
+	var submatches = function (regex) {
+		return A2(
+			elm$core$Basics$composeR,
+			elm$regex$Regex$find(
+				A2(
+					elm$core$Maybe$withDefault,
+					elm$regex$Regex$never,
+					elm$regex$Regex$fromString(regex))),
+			A2(
+				elm$core$Basics$composeR,
+				elm$core$List$concatMap(
+					function ($) {
+						return $.aH;
+					}),
+				elm$core$List$filterMap(elm$core$Basics$identity)));
+	};
 	var addEntry = function (xs) {
 		if (xs.b) {
 			var hd = xs.a;
@@ -5063,15 +5208,21 @@ var author$project$Tidy$fromCSV = function () {
 			A2(
 				elm$core$Basics$composeR,
 				elm$core$List$map(
-					elm$core$String$split(',')),
+					function (s) {
+						return ' ' + (s + ' ');
+					}),
 				A2(
 					elm$core$Basics$composeR,
-					author$project$Tidy$transpose,
-					A2(elm$core$List$foldl, addEntry, elm$core$Dict$empty)))));
+					elm$core$List$map(
+						submatches('(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)')),
+					A2(
+						elm$core$Basics$composeR,
+						author$project$Tidy$transpose,
+						A2(elm$core$List$foldl, addEntry, elm$core$Dict$empty))))));
 }();
 var author$project$WickhamExamples$messy1 = author$project$Tidy$fromCSV('Person,treatmenta,treatmentb\nJohn Smith, , 2\nJane Doe, 16, 11\nMary Johnson, 3,\n');
 var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nReligion,income0-10k,income10-20k,income20-30k,income30-40k,income40-50k,income50-75k\nAgnostic,                 27,  34,   60,  81,  76,  137\nAtheist,                  12,  27,   37,  52,  35,   70\nBuddhist,                 27,  21,   30,  34,  33,   58\nCatholic,                418, 617,  732, 670, 638, 1116\nDon\'t know/refused,       15,  14,   15,  11,  10,   35\nEvangelical Prot,        575, 869, 1064, 982, 881, 1486\nHindu,                     1,   9,    7,   9,  11,   34\nHistorically Black Prot, 228, 224,  236, 238, 197,  223\nJehovah\'s Witness,        20,  27,   24,  24,  21,   30\nJewish,                   19,  19,   25,  25,  30,   95\n');
-var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear, artist,        track,                  time, date.entered, wk1, wk2, wk3\n2000, 2 Pac,         Baby Don\'t Cry,         4:22, 2000-02-26,   87,  82,  72\n2000, 2Ge+her,       The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92\n2000, 3 Doors Down,  Kryptonite,             3:15, 2000-04-08,   81,  70,  68\n2000, 98^0,          Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34\n2000, A*Teens,       Dancing Queen,          3:44, 2000-07-08,   97,  97,  96\n2000, Aaliyah,       I Don\'t Wanna,          4:15, 2000-01-29,   84,  62,  51\n2000, Aaliyah,       Try Again,              4:03, 2000-03-18,   59,  53,  38\n2000, Yolanda Adams, Open My Heart,          5:30, 2000-08-26,   76,  76,  74\n');
+var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear, artist,           track,                  time, date.entered, wk1, wk2, wk3\n2000, 2 Pac,            Baby Don\'t Cry,         4:22, 2000-02-26,   87,  82,  72\n2000, 2Ge+her,          The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92\n2000, 3 Doors Down,     Kryptonite,             3:15, 2000-04-08,   81,  70,  68\n2000, 98^0,             Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34\n2000, A*Teens,          Dancing Queen,          3:44, 2000-07-08,   97,  97,  96\n2000, Aaliyah,          I Don\'t Wanna,          4:15, 2000-01-29,   84,  62,  51\n2000, Aaliyah,          Try Again,              4:03, 2000-03-18,   59,  53,  38\n2000, "Adams, Yolanda", Open My Heart,          5:30, 2000-08-26,   76,  76,  74\n');
 var elm$core$Dict$foldl = F3(
 	function (func, acc, dict) {
 		foldl:
@@ -5095,15 +5246,6 @@ var elm$core$Dict$foldl = F3(
 				dict = $temp$dict;
 				continue foldl;
 			}
-		}
-	});
-var elm$core$Maybe$withDefault = F2(
-	function (_default, maybe) {
-		if (!maybe.$) {
-			var value = maybe.a;
-			return value;
-		} else {
-			return _default;
 		}
 	});
 var author$project$Tidy$tableHead = function (tbl) {
@@ -5212,7 +5354,6 @@ var elm$core$Dict$get = F2(
 			}
 		}
 	});
-var elm$core$Basics$False = 1;
 var elm$core$Basics$True = 0;
 var elm$core$List$any = F2(
 	function (isOkay, list) {
@@ -5790,11 +5931,11 @@ var author$project$WickhamExamples$toHtml = A2(
 	A2(
 		elm_explorations$markdown$Markdown$toHtmlWith,
 		{
-			an: elm$core$Maybe$Nothing,
-			ar: elm$core$Maybe$Just(
-				{al: false, aD: true}),
-			aA: false,
-			aB: false
+			ap: elm$core$Maybe$Nothing,
+			at: elm$core$Maybe$Just(
+				{an: false, aJ: true}),
+			aF: false,
+			aG: false
 		},
 		_List_Nil));
 var elm$core$Basics$negate = function (n) {
@@ -5833,7 +5974,7 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Tidy Table 3')
+						elm$html$Html$text('tidied as Table 3')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy3)),
@@ -5852,10 +5993,11 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Tidy Table 6')
+						elm$html$Html$text('tidied as Table 6')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy6)),
+				A2(elm$html$Html$hr, _List_Nil, _List_Nil),
 				A2(
 				elm$html$Html$h2,
 				_List_Nil,
@@ -5870,10 +6012,11 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Tidy Table 8')
+						elm$html$Html$text('tidied as Table 8')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy8))
+				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy8)),
+				A2(elm$html$Html$hr, _List_Nil, _List_Nil)
 			]));
 };
 var elm$core$Platform$Cmd$batch = _Platform_batch;
@@ -5993,7 +6136,7 @@ var elm$core$String$contains = _String_contains;
 var elm$core$String$toInt = _String_toInt;
 var elm$url$Url$Url = F6(
 	function (protocol, host, port_, path, query, fragment) {
-		return {R: fragment, S: host, W: path, Y: port_, aa: protocol, ab: query};
+		return {S: fragment, T: host, Y: path, _: port_, ac: protocol, ad: query};
 	});
 var elm$url$Url$chompBeforePath = F5(
 	function (protocol, path, params, frag, str) {
@@ -6100,22 +6243,22 @@ var elm$url$Url$fromString = function (str) {
 var elm$browser$Browser$sandbox = function (impl) {
 	return _Browser_element(
 		{
-			au: function (_n0) {
-				return _Utils_Tuple2(impl.au, elm$core$Platform$Cmd$none);
+			ax: function (_n0) {
+				return _Utils_Tuple2(impl.ax, elm$core$Platform$Cmd$none);
 			},
-			aC: function (_n1) {
+			aI: function (_n1) {
 				return elm$core$Platform$Sub$none;
 			},
-			aF: F2(
+			aL: F2(
 				function (msg, model) {
 					return _Utils_Tuple2(
-						A2(impl.aF, msg, model),
+						A2(impl.aL, msg, model),
 						elm$core$Platform$Cmd$none);
 				}),
-			aH: impl.aH
+			aN: impl.aN
 		});
 };
 var author$project$WickhamExamples$main = elm$browser$Browser$sandbox(
-	{au: 0, aF: author$project$WickhamExamples$update, aH: author$project$WickhamExamples$view});
+	{ax: 0, aL: author$project$WickhamExamples$update, aN: author$project$WickhamExamples$view});
 _Platform_export({'WickhamExamples':{'init':author$project$WickhamExamples$main(
 	elm$json$Json$Decode$succeed(0))(0)}});}(this));

@@ -93,6 +93,7 @@ table2:
 -}
 
 import Dict exposing (Dict)
+import Regex
 
 
 {-| The main unit of data organsiation is the `Table`, which is a collection of
@@ -124,8 +125,14 @@ etc.
 -}
 fromCSV : String -> Table
 fromCSV =
-    -- TODO: Add a more robust CSV splitter that includes quoted commas, empty elements and handles escaped quotes. See for example https://stackoverflow.com/questions/18144431/regex-to-split-a-csv
     let
+        submatches : String -> String -> List String
+        submatches regex =
+            Regex.find
+                (Regex.fromString regex |> Maybe.withDefault Regex.never)
+                >> List.concatMap .submatches
+                >> List.filterMap identity
+
         addEntry xs =
             case xs of
                 hd :: tl ->
@@ -136,7 +143,10 @@ fromCSV =
     in
     String.split "\n"
         >> List.filter (not << String.isEmpty)
-        >> List.map (String.split ",")
+        >> List.map (\s -> " " ++ s ++ " ")
+        -- regex modified from https://stackoverflow.com/a/42535295 to account for whitespace between commas adjacent to quoted entries.
+        -- For Elm parser approach consider https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38
+        >> List.map (submatches "(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)")
         >> transpose
         >> List.foldl addEntry Dict.empty
 
@@ -575,7 +585,10 @@ transpose listOfLists =
         tails =
             List.filterMap List.tail listOfLists
     in
-    if List.length heads == List.length listOfLists then
+    if List.length heads == 0 then
+        []
+
+    else if List.length heads == List.length listOfLists then
         heads :: transpose tails
 
     else

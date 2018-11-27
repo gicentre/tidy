@@ -2,7 +2,6 @@ module WickhamExamples exposing (main)
 
 import Browser
 import Html exposing (Html, div, h1, h2, hr, text)
-import Html.Events exposing (onClick)
 import Markdown
 import Tidy exposing (..)
 
@@ -20,17 +19,19 @@ view model =
         [ h1 [] [ text "Examples from Wickham (2014)" ]
         , h2 [] [ text "Messy Table 1" ]
         , messy1 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "Tidy Table 3" ]
+        , h2 [] [ text "tidied as Table 3" ]
         , tidy3 |> tableSummary -1 |> toHtml
         , hr [] []
         , h2 [] [ text "Messy Table 4" ]
         , messy4 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "Tidy Table 6" ]
+        , h2 [] [ text "tidied as Table 6" ]
         , tidy6 |> tableSummary -1 |> toHtml
+        , hr [] []
         , h2 [] [ text "Messy Table 7" ]
         , messy7 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "Tidy Table 8" ]
+        , h2 [] [ text "tidied as Table 8" ]
         , tidy8 |> tableSummary -1 |> toHtml
+        , hr [] []
         ]
 
 
@@ -89,15 +90,15 @@ tidy6 =
 messy7 : Table
 messy7 =
     """
-year, artist,        track,                  time, date.entered, wk1, wk2, wk3
-2000, 2 Pac,         Baby Don't Cry,         4:22, 2000-02-26,   87,  82,  72
-2000, 2Ge+her,       The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92
-2000, 3 Doors Down,  Kryptonite,             3:15, 2000-04-08,   81,  70,  68
-2000, 98^0,          Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34
-2000, A*Teens,       Dancing Queen,          3:44, 2000-07-08,   97,  97,  96
-2000, Aaliyah,       I Don't Wanna,          4:15, 2000-01-29,   84,  62,  51
-2000, Aaliyah,       Try Again,              4:03, 2000-03-18,   59,  53,  38
-2000, Yolanda Adams, Open My Heart,          5:30, 2000-08-26,   76,  76,  74
+year, artist,           track,                  time, date.entered, wk1, wk2, wk3
+2000, 2 Pac,            Baby Don't Cry,         4:22, 2000-02-26,   87,  82,  72
+2000, 2Ge+her,          The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92
+2000, 3 Doors Down,     Kryptonite,             3:15, 2000-04-08,   81,  70,  68
+2000, 98^0,             Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34
+2000, A*Teens,          Dancing Queen,          3:44, 2000-07-08,   97,  97,  96
+2000, Aaliyah,          I Don't Wanna,          4:15, 2000-01-29,   84,  62,  51
+2000, Aaliyah,          Try Again,              4:03, 2000-03-18,   59,  53,  38
+2000, "Adams, Yolanda", Open My Heart,          5:30, 2000-08-26,   76,  76,  74
 """
         |> fromCSV
 
