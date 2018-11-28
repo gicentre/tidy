@@ -1,5 +1,8 @@
 module Tidy exposing
     ( Table
+    , Columns
+    , Heading
+    , Cell
     , fromCSV
     , tableSummary
     , melt
@@ -9,10 +12,10 @@ module Tidy exposing
     , outerJoin
     , filterRows
     , filterColumns
-    , toColumn
     , numColumn
     , strColumn
     , boolColumn
+    , toColumn
     )
 
 {-| A collection of utilities for representing tabular data and reshaping them.
@@ -21,6 +24,9 @@ module Tidy exposing
 ## Table Representation
 
 @docs Table
+@docs Columns
+@docs Heading
+@docs Cell
 @docs fromCSV
 @docs tableSummary
 
@@ -85,10 +91,10 @@ table2:
 
 ## Column conversion
 
-@docs toColumn
 @docs numColumn
 @docs strColumn
 @docs boolColumn
+@docs toColumn
 
 -}
 
@@ -97,13 +103,29 @@ import Regex
 
 
 {-| The main unit of data organsiation is the `Table`, which is a collection of
-data columns each referenced by a column name. All table values are
-[Strings](https://package.elm-lang.org/packages/elm/core/latest/String) but can be
-converted into other types when necessary.
+data columns each referenced by a column heading.
 -}
 type alias Table =
-    { columns : Dict String (List String)
+    { columns : Columns
     }
+
+
+{-| The columns that make up a table of cells.
+-}
+type alias Columns =
+    Dict Heading (List Cell)
+
+
+{-| Type used to represent table column headings.
+-}
+type alias Heading =
+    String
+
+
+{-| Type of data stored in the cells that make up a table.
+-}
+type alias Cell =
+    String
 
 
 {-| Create a table from a multi-line comma-separated string in the form:
@@ -125,6 +147,7 @@ fromCSV =
                 >> List.concatMap .submatches
                 >> List.filterMap identity
 
+        addEntry : List Cell -> Columns -> Columns
         addEntry xs =
             case xs of
                 hd :: tl ->
@@ -133,11 +156,13 @@ fromCSV =
                 _ ->
                     identity
     in
+    -- regex modified from https://stackoverflow.com/a/42535295 to account for
+    -- whitespace between commas adjacent to quoted entries.
+    -- For Elm parser approach consider
+    -- https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38
     String.split "\n"
         >> List.filter (not << String.isEmpty)
         >> List.map (\s -> " " ++ s ++ " ")
-        -- regex modified from https://stackoverflow.com/a/42535295 to account for whitespace between commas adjacent to quoted entries.
-        -- For Elm parser approach consider https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38
         >> List.map (submatches "(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)")
         >> transpose
         >> List.foldl addEntry Dict.empty
@@ -145,88 +170,76 @@ fromCSV =
 
 
 {-| Extract the values of a given column from a table. The type of values in the
-column is determined by the given string conversion function. Any conversions that
-fail are not included in the resulting list of values.
+column is determined by the given cell conversion function. The converter function
+should handle cases of missing data in the table as well as failed conversions
+(e.g. attempts to convert text into a number).
 
-    imputeMissing : String -> Maybe Int
-    imputeMissing val =
-        case String.toInt val of
-            Just n ->
-                Just n
-
-            Nothing ->
-                Just 0
+    imputeMissing : Cell -> Int
+    imputeMissing =
+        String.toFloat >> Maybe.withDefault 0
 
     myTable |> toColumn "count" imputeMissing
 
 -}
-toColumn : String -> (String -> Maybe a) -> Table -> List a
-toColumn colName converter =
+toColumn : Heading -> (Cell -> a) -> Table -> List a
+toColumn heading converter =
     .columns
-        >> Dict.get colName
+        >> Dict.get heading
         >> Maybe.withDefault []
-        >> List.filterMap converter
+        >> List.map converter
 
 
 {-| Extract the numeric values of a given column from a table. Any conversions that
-fail are not included in the resulting list of values. This is a convenience function
-equivalent calling [toColumn](#toColumn) providing the conversion function
-[String.toFloat](https://package.elm-lang.org/packages/elm/core/latest/String#toFloat)
+fail, including missing values in the table are converted into zeros. If you wish
+to handle missing data / failed conversions in a different way, use
+[toColumn](#toColumn) instead, providing a custom converter function.
 
     myTable |> numColumn "year"
 
 -}
-numColumn : String -> Table -> List Float
-numColumn colName =
-    toColumn colName String.toFloat
+numColumn : Heading -> Table -> List Float
+numColumn heading =
+    toColumn heading (String.toFloat >> Maybe.withDefault 0)
 
 
-{-| Extract the string values of a given column from a table.
+{-| Extract the string values of a given column from a table. Missing values in
+the table are represented as empty strings. If you wish to handle missing values
+in a different way, use [toColumn](#toColumn) instead, providing a custom converter
+function.
 
-    myTable |> strColumn "location"
+    myTable |> strColumn "cityName"
 
 -}
-strColumn : String -> Table -> List String
-strColumn colName =
-    toColumn colName Just
+strColumn : Heading -> Table -> List String
+strColumn heading =
+    toColumn heading identity
 
 
-{-| Extract Boolean values of a given column from a table. Any conversions that
-fail are not included in the resulting list of values. Assumes that `True` values
-can be represented by the case-insenstive strings `true`, `yes` and `1`, and that
-`False` values can be represented by `false`, `no` and `0`. All other values will
-be ignored and not provided in the resulting list.
+{-| Extract Boolean values of a given column from a table. Assumes that `True`
+values can be represented by the case-insenstive strings `true`, `yes` and `1`
+while all other values are assumed to be false.
 
       myTable |> toBool "isMarried"
 
 -}
-boolColumn : String -> Table -> List Bool
-boolColumn colName =
+boolColumn : Heading -> Table -> List Bool
+boolColumn heading =
     let
         toBool str =
-            case String.toLower str of
+            case str |> String.trim |> String.toLower of
                 "true" ->
-                    Just True
+                    True
 
                 "yes" ->
-                    Just True
+                    True
 
                 "1" ->
-                    Just True
-
-                "false" ->
-                    Just False
-
-                "no" ->
-                    Just False
-
-                "0" ->
-                    Just False
+                    True
 
                 _ ->
-                    Nothing
+                    False
     in
-    toColumn colName toBool
+    toColumn heading toBool
 
 
 {-| Provide a textual description of a table, configurable to show a given number
@@ -302,9 +315,9 @@ can be melted to create a tidy table:
 | Glasgow   | 2017 |  9          |
 ```
 
-The first two parameters represent the names to be given to the column reference
-(`year` in the example above) and variable column (`temperature` in the example above)
-to be generated. The third is a list of the (columnName,columnReference)
+The first two parameters represent the heading names to be given to the column
+reference (`year` in the example above) and variable column (`temperature` in the
+example above) to be generated. The third is a list of the (columnName,columnReference)
 to be melted (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2017") ]`
 above) and the final, the table to convert. For example
 
@@ -320,7 +333,7 @@ above) and the final, the table to convert. For example
             ]
 
 -}
-melt : String -> String -> List ( String, String ) -> Table -> Table
+melt : Heading -> Heading -> List ( Heading, Cell ) -> Table -> Table
 melt columnName valueName colVars table =
     let
         columnLookup =
@@ -379,11 +392,11 @@ melt columnName valueName colVars table =
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
-test. The test should be a function that takes a string representing the cell value
-and returns either `True` or `False` depending on whether the row containing that
-value in the column should be retained.
+test. The test should be a function that takes a cell value and returns either
+`True` or `False` depending on whether the row containing that value in the column
+should be retained.
 
-    isWarm : String -> Bool
+    isWarm : Cell -> Bool
     isWarm s =
         case String.toFloat s of
             Just x ->
@@ -396,7 +409,7 @@ value in the column should be retained.
         myTable |> filterRows "temperature" isWarm
 
 -}
-filterRows : String -> (String -> Bool) -> Table -> Table
+filterRows : Heading -> (Cell -> Bool) -> Table -> Table
 filterRows columnName fn tbl =
     let
         predicate n val =
@@ -425,13 +438,13 @@ filterRows columnName fn tbl =
 
 
 {-| Keep columns in the table whose names satisfy the given test. The test should
-be a function that takes a string representing the column name and returns either
-`True` or `False` depending on whether the column should be retained.
+be a function that takes a column heading and returns either `True` or `False`
+depending on whether the column should be retained.
 
     myTable |> filterColumns ((==) "temperature2017")
 
 -}
-filterColumns : (String -> Bool) -> Table -> Table
+filterColumns : (Heading -> Bool) -> Table -> Table
 filterColumns fn =
     .columns >> Dict.filter (\k _ -> fn k) >> Table
 
@@ -454,11 +467,11 @@ would generate
 ```
 
 -}
-leftJoin : ( Table, String ) -> ( Table, String ) -> Table
-leftJoin ( t1, k1 ) ( t2, k2 ) =
+leftJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
+leftJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
         keyCol colLabel =
-            case ( Dict.get k2 t2.columns, Dict.get colLabel t2.columns ) of
+            case ( Dict.get heading2 t2.columns, Dict.get colLabel t2.columns ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -467,7 +480,7 @@ leftJoin ( t1, k1 ) ( t2, k2 ) =
 
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (Dict.get k1 t1.columns |> Maybe.withDefault [])
+                (Dict.get heading1 t1.columns |> Maybe.withDefault [])
 
         leftInsert label2 table =
             if Dict.member label2 table.columns then
@@ -497,9 +510,9 @@ would generate
 ```
 
 -}
-rightJoin : ( Table, String ) -> ( Table, String ) -> Table
-rightJoin ( t1, k1 ) ( t2, k2 ) =
-    leftJoin ( t2, k2 ) ( t1, k1 )
+rightJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
+rightJoin =
+    flip leftJoin
 
 
 {-| An 'inner join' will contain only key-matched rows that are present in both tables.
@@ -516,11 +529,11 @@ would generate
 ```
 
 -}
-innerJoin : ( Table, String ) -> ( Table, String ) -> Table
-innerJoin ( t1, k1 ) ( t2, k2 ) =
+innerJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
+innerJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
         keyCol colLabel =
-            case ( Dict.get k2 t2.columns, Dict.get colLabel t2.columns ) of
+            case ( Dict.get heading2 t2.columns, Dict.get colLabel t2.columns ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -529,11 +542,11 @@ innerJoin ( t1, k1 ) ( t2, k2 ) =
 
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (Dict.get k1 t1.columns |> Maybe.withDefault [])
+                (Dict.get heading1 t1.columns |> Maybe.withDefault [])
     in
     List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) t1.columns (Dict.keys t2.columns)
         |> Table
-        |> filterRows k2 (not << String.isEmpty)
+        |> filterRows heading2 (not << String.isEmpty)
 
 
 {-| An _outer join_ contains all rows of both joined tables.
@@ -554,17 +567,19 @@ would generate
 ```
 
 -}
-outerJoin : ( Table, String ) -> ( Table, String ) -> Table
-outerJoin ( t1, k1 ) ( t2, k2 ) =
+outerJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
+outerJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
         left =
-            leftJoin ( t1, k1 ) ( t2, k2 )
+            leftJoin ( t1, heading1 ) ( t2, heading2 )
 
         right =
-            rightJoin ( t1, k1 ) ( t2, k2 )
+            rightJoin ( t1, heading1 ) ( t2, heading2 )
 
         diff =
-            filterRows k2 (\s -> Basics.not (List.member s (Dict.get k1 left.columns |> Maybe.withDefault []))) right
+            filterRows heading2
+                (\s -> Basics.not (List.member s (Dict.get heading1 left.columns |> Maybe.withDefault [])))
+                right
     in
     Dict.map (\k v -> v ++ (Dict.get k diff.columns |> Maybe.withDefault [])) left.columns
         |> Table
@@ -572,6 +587,11 @@ outerJoin ( t1, k1 ) ( t2, k2 ) =
 
 
 -- ------------------------------- Private
+
+
+flip : (a -> b -> c) -> b -> a -> c
+flip fn argB argA =
+    fn argA argB
 
 
 transpose : List (List a) -> List (List a)
@@ -593,7 +613,7 @@ transpose listOfLists =
         []
 
 
-tableHead : Table -> List ( String, String )
+tableHead : Table -> List ( Heading, Cell )
 tableHead tbl =
     if List.foldl (max << List.length) 0 (Dict.values tbl.columns) == 0 then
         []
