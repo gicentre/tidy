@@ -1,6 +1,5 @@
 module Tidy exposing
     ( Table
-    , Columns
     , Heading
     , Cell
     , fromCSV
@@ -24,7 +23,6 @@ module Tidy exposing
 ## Table Representation
 
 @docs Table
-@docs Columns
 @docs Heading
 @docs Cell
 @docs fromCSV
@@ -102,12 +100,14 @@ import Dict exposing (Dict)
 import Regex
 
 
-{-| The main unit of data organsiation is the `Table`, which is a collection of
-data columns each referenced by a column heading.
+{-| A table of data arranged in rows and columns.
 -}
-type alias Table =
-    { columns : Columns
-    }
+type
+    Table
+    -- Opaque type
+    = Table
+        { columns : Columns
+        }
 
 
 {-| The columns that make up a table of cells.
@@ -166,7 +166,7 @@ fromCSV =
         >> List.map (submatches "(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)")
         >> transpose
         >> List.foldl addEntry Dict.empty
-        >> Table
+        >> toTable
 
 
 {-| Extract the values of a given column from a table. The type of values in the
@@ -183,7 +183,7 @@ should handle cases of missing data in the table as well as failed conversions
 -}
 toColumn : Heading -> (Cell -> a) -> Table -> List a
 toColumn heading converter =
-    .columns
+    getColumns
         >> Dict.get heading
         >> Maybe.withDefault []
         >> List.map converter
@@ -261,30 +261,32 @@ tableSummary maxRows tbl =
             List.map (\s -> s ++ " |") >> (::) "|"
 
         headings =
-            tbl.columns |> Dict.keys |> addDividers
+            tbl |> getColumns |> Dict.keys |> addDividers
 
         divider =
-            tbl.columns |> Dict.keys |> List.map (always "-") |> addDividers
+            tbl |> getColumns |> Dict.keys |> List.map (always "-") |> addDividers
 
         values =
-            Dict.values tbl.columns
+            tbl
+                |> getColumns
+                |> Dict.values
                 |> List.map (List.take mx)
                 |> transpose
                 |> List.map (\ss -> addDividers ss ++ [ "\n" ])
                 |> List.concat
 
         numTableRows =
-            List.foldl (max << List.length) 0 (Dict.values tbl.columns)
+            List.foldl (max << List.length) 0 (Dict.values (getColumns tbl))
 
         continues =
             if numTableRows > mx then
-                tbl.columns |> Dict.keys |> List.map (always " : ") |> addDividers
+                tbl |> getColumns |> Dict.keys |> List.map (always " : ") |> addDividers
 
             else
                 []
 
         dimensions =
-            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size tbl.columns), " columns in total." ]
+            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size (getColumns tbl)), " columns in total." ]
     in
     [ headings, [ "\n" ], divider, [ "\n" ], values, continues, dimensions ]
         |> List.concat
@@ -336,59 +338,65 @@ above) and the final, the table to convert. For example
 melt : Heading -> Heading -> List ( Heading, Cell ) -> Table -> Table
 melt columnName valueName colVars table =
     let
-        columnLookup =
+        colToVarLookup : Dict Heading Cell
+        colToVarLookup =
             Dict.fromList colVars
 
-        emptyTable =
-            table.columns
+        emptyColumns : Columns
+        emptyColumns =
+            table
+                |> getColumns
                 |> Dict.keys
                 |> List.filter (\s -> not (List.member s (List.map Tuple.first colVars)))
                 |> (++) [ columnName, valueName ]
                 |> List.map (\label -> ( label, [] ))
                 |> Dict.fromList
-                |> Table
 
-        newRow tbl =
+        newRows : Columns -> List (List ( Heading, Cell ))
+        newRows columns =
             let
-                meltCol ( oldLabel, val ) =
-                    case Dict.get oldLabel columnLookup of
+                meltCol ( oldHeading, val ) =
+                    case Dict.get oldHeading colToVarLookup of
                         Just colRef ->
                             Just [ ( columnName, colRef ), ( valueName, val ) ]
 
                         Nothing ->
                             Nothing
 
-                originalCol ( oldLabel, val ) =
-                    case Dict.get oldLabel columnLookup of
+                unmeltedCol ( oldHeading, val ) =
+                    case Dict.get oldHeading colToVarLookup of
                         Just colRef ->
                             Nothing
 
                         Nothing ->
-                            Just ( oldLabel, val )
+                            Just ( oldHeading, val )
 
-                originalCols =
-                    tableHead tbl |> List.filterMap originalCol
+                unmeltedCols =
+                    columns |> columnsHead |> List.filterMap unmeltedCol
             in
-            tableHead tbl
+            columns
+                |> columnsHead
                 |> List.filterMap meltCol
-                |> List.map (\x -> x ++ originalCols)
+                |> List.map (\x -> x ++ unmeltedCols)
 
-        addToColumn lbl tbl val =
-            (Dict.get lbl tbl.columns |> Maybe.withDefault []) ++ [ val ]
+        addToColumn : Heading -> Columns -> Cell -> List Cell
+        addToColumn heading columns val =
+            (Dict.get heading columns |> Maybe.withDefault []) ++ [ val ]
 
-        addMeltedRows row tbl =
-            List.foldl (\( lbl, val ) -> Dict.insert lbl (addToColumn lbl tbl val)) tbl.columns row
-                |> Table
+        addMeltedRows : List ( Heading, Cell ) -> Columns -> Columns
+        addMeltedRows row columns =
+            List.foldl (\( heading, val ) -> Dict.insert heading (addToColumn heading columns val)) columns row
 
-        extractRows ( oldTable, newTable ) =
-            case tableHead oldTable of
+        extractRows : ( Columns, Columns ) -> ( Columns, Columns )
+        extractRows ( oldColumns, newColumns ) =
+            case columnsHead oldColumns of
                 [] ->
-                    ( oldTable, newTable )
+                    ( oldColumns, newColumns )
 
                 row ->
-                    extractRows ( tableTail oldTable, List.foldr addMeltedRows newTable (newRow oldTable) )
+                    extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
     in
-    extractRows ( table, emptyTable ) |> Tuple.second
+    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> toTable
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
@@ -420,7 +428,7 @@ filterRows columnName fn tbl =
                 -1
 
         colValues =
-            case Dict.get columnName tbl.columns of
+            case Dict.get columnName (getColumns tbl) of
                 Nothing ->
                     []
 
@@ -434,7 +442,7 @@ filterRows columnName fn tbl =
                 |> List.filter (\( n, _ ) -> List.member n colValues)
                 |> List.map Tuple.second
     in
-    tbl.columns |> Dict.map filterFromCol |> Table
+    tbl |> getColumns |> Dict.map filterFromCol |> toTable
 
 
 {-| Keep columns in the table whose names satisfy the given test. The test should
@@ -446,7 +454,7 @@ depending on whether the column should be retained.
 -}
 filterColumns : (Heading -> Bool) -> Table -> Table
 filterColumns fn =
-    .columns >> Dict.filter (\k _ -> fn k) >> Table
+    getColumns >> Dict.filter (\k _ -> fn k) >> toTable
 
 
 {-| A _left join_ preserves all the values in the first table and adds any key-matched
@@ -471,7 +479,7 @@ leftJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
 leftJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
         keyCol colLabel =
-            case ( Dict.get heading2 t2.columns, Dict.get colLabel t2.columns ) of
+            case ( Dict.get heading2 (getColumns t2), Dict.get colLabel (getColumns t2) ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -480,16 +488,16 @@ leftJoin ( t1, heading1 ) ( t2, heading2 ) =
 
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (Dict.get heading1 t1.columns |> Maybe.withDefault [])
+                (Dict.get heading1 (getColumns t1) |> Maybe.withDefault [])
 
-        leftInsert label2 table =
-            if Dict.member label2 table.columns then
-                table
+        leftInsert label2 columns =
+            if Dict.member label2 columns then
+                columns
 
             else
-                table.columns |> Dict.insert label2 (tableCol label2) |> Table
+                columns |> Dict.insert label2 (tableCol label2)
     in
-    List.foldl leftInsert t1 (Dict.keys t2.columns)
+    List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2)) |> toTable
 
 
 {-| A _right join_ preserves all the values in the second table and adds any key-matched
@@ -533,7 +541,7 @@ innerJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
 innerJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
         keyCol colLabel =
-            case ( Dict.get heading2 t2.columns, Dict.get colLabel t2.columns ) of
+            case ( Dict.get heading2 (getColumns t2), Dict.get colLabel (getColumns t2) ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -542,10 +550,10 @@ innerJoin ( t1, heading1 ) ( t2, heading2 ) =
 
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (Dict.get heading1 t1.columns |> Maybe.withDefault [])
+                (Dict.get heading1 (getColumns t1) |> Maybe.withDefault [])
     in
-    List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) t1.columns (Dict.keys t2.columns)
-        |> Table
+    List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) (getColumns t1) (Dict.keys (getColumns t2))
+        |> toTable
         |> filterRows heading2 (not << String.isEmpty)
 
 
@@ -570,19 +578,19 @@ would generate
 outerJoin : ( Table, Heading ) -> ( Table, Heading ) -> Table
 outerJoin ( t1, heading1 ) ( t2, heading2 ) =
     let
-        left =
-            leftJoin ( t1, heading1 ) ( t2, heading2 )
+        leftColumns =
+            leftJoin ( t1, heading1 ) ( t2, heading2 ) |> getColumns
 
-        right =
+        rightTable =
             rightJoin ( t1, heading1 ) ( t2, heading2 )
 
         diff =
             filterRows heading2
-                (\s -> Basics.not (List.member s (Dict.get heading1 left.columns |> Maybe.withDefault [])))
-                right
+                (\s -> Basics.not (List.member s (Dict.get heading1 leftColumns |> Maybe.withDefault [])))
+                rightTable
     in
-    Dict.map (\k v -> v ++ (Dict.get k diff.columns |> Maybe.withDefault [])) left.columns
-        |> Table
+    Dict.map (\k v -> v ++ (Dict.get k (getColumns diff) |> Maybe.withDefault [])) leftColumns
+        |> toTable
 
 
 
@@ -613,15 +621,27 @@ transpose listOfLists =
         []
 
 
-tableHead : Table -> List ( Heading, Cell )
-tableHead tbl =
-    if List.foldl (max << List.length) 0 (Dict.values tbl.columns) == 0 then
+columnsHead : Columns -> List ( Heading, Cell )
+columnsHead columns =
+    if List.foldl (max << List.length) 0 (Dict.values columns) == 0 then
         []
 
     else
-        Dict.foldl (\k v -> (::) ( k, List.head v |> Maybe.withDefault "" )) [] tbl.columns
+        Dict.foldl (\k v -> (::) ( k, List.head v |> Maybe.withDefault "" )) [] columns
 
 
-tableTail : Table -> Table
-tableTail =
-    .columns >> Dict.map (always (List.drop 1)) >> Table
+columnsTail : Columns -> Columns
+columnsTail =
+    Dict.map (always (List.drop 1))
+
+
+toTable : Columns -> Table
+toTable cols =
+    Table { columns = cols }
+
+
+getColumns : Table -> Columns
+getColumns tbl =
+    case tbl of
+        Table cols ->
+            .columns cols
