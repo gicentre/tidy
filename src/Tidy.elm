@@ -3,6 +3,7 @@ module Tidy exposing
     , Heading
     , Cell
     , fromCSV
+    , fromGrid
     , tableSummary
     , melt
     , leftJoin
@@ -26,6 +27,7 @@ module Tidy exposing
 @docs Heading
 @docs Cell
 @docs fromCSV
+@docs fromGrid
 @docs tableSummary
 
 
@@ -160,12 +162,68 @@ fromCSV =
     -- whitespace between commas adjacent to quoted entries.
     -- For Elm parser approach consider
     -- https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38
-    String.split "\n"
+    String.lines
         >> List.filter (not << String.isEmpty)
         >> List.map (\s -> " " ++ s ++ " ")
         >> List.map (submatches "(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)")
         >> transpose
         >> List.foldl addEntry Dict.empty
+        >> toTable
+
+
+{-| Transform row-prime grid of input values in the form:
+
+    """
+       z00,z01,z02,z03, etc.
+       z10,z11,z12,z13, etc.
+       z20,z21,z22,c23, etc.
+       z30,z31,z32,c33, etc.
+       etc."""
+
+into a tidy table in the form:
+
+```markdown
+| row | col |   z |
+| --- | --- | --- |
+|   0 |   0 | z00 |
+|   0 |   1 | z00 |
+|   0 |   2 | z00 |
+|   0 |   3 | z00 |
+|   1 |   0 | z10 |
+|   1 |   1 | z11 |
+|   : |   : |   : |
+```
+
+-}
+fromGrid : String -> Table
+fromGrid =
+    let
+        updateCol v maybeCol =
+            case maybeCol of
+                Nothing ->
+                    Just [ v ]
+
+                Just col ->
+                    Just (v :: col)
+
+        addRow ( r, c, z ) =
+            Dict.update "row" (updateCol r)
+                >> Dict.update "col" (updateCol c)
+                >> Dict.update "z" (updateCol z)
+    in
+    String.lines
+        >> List.filter (not << String.isEmpty)
+        >> List.indexedMap
+            (\r ->
+                String.split ","
+                    >> List.filter (not << String.isEmpty)
+                    >> List.indexedMap
+                        (\c z ->
+                            ( String.fromInt r, String.fromInt c, String.trim z )
+                        )
+            )
+        >> List.concat
+        >> List.foldl addRow Dict.empty
         >> toTable
 
 
@@ -603,22 +661,12 @@ flip fn argB argA =
 
 
 transpose : List (List a) -> List (List a)
-transpose listOfLists =
+transpose xss =
     let
-        heads =
-            List.filterMap List.head listOfLists
-
-        tails =
-            List.filterMap List.tail listOfLists
+        numCols =
+            List.head >> Maybe.withDefault [] >> List.length
     in
-    if List.length heads == 0 then
-        []
-
-    else if List.length heads == List.length listOfLists then
-        heads :: transpose tails
-
-    else
-        []
+    List.foldr (List.map2 (::)) (List.repeat (numCols xss) []) xss
 
 
 columnsHead : Columns -> List ( Heading, Cell )
