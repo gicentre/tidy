@@ -6,6 +6,7 @@ module Tidy exposing
     , empty
     , insertRow
     , filterRows
+    , renameColumn
     , insertColumn
     , removeColumn
     , filterColumns
@@ -40,6 +41,7 @@ module Tidy exposing
 @docs insertRow
 @docs filterRows
 
+@docs renameColumn
 @docs insertColumn
 @docs removeColumn
 @docs filterColumns
@@ -70,7 +72,7 @@ Messy data can be tidied with a small number of simple operations.
 
 Join two tables using a common key. While not specific to tidy data, joining tidy
 tables is often more meaningful than joining messy ones. The examples below illustrate
-joining two input tables as follows with shared key values k2 and k4:
+joining two input tables as follows with shared key values `k2` and `k4`:
 
 ```markdown
 table1:
@@ -290,6 +292,25 @@ insertRow namedCells =
         >> toTable
 
 
+{-| Rename the given column (first parameter) with a new name (second parameter).
+If the new column name matches an exsiting one, the existing one will be replaced
+by the renamed column.
+-}
+renameColumn : String -> String -> Table -> Table
+renameColumn oldName newName =
+    getColumns
+        >> Dict.foldl
+            (\( n, colName ) ->
+                if colName == oldName then
+                    Dict.insert ( n, newName )
+
+                else
+                    Dict.insert ( n, colName )
+            )
+            Dict.empty
+        >> toTable
+
+
 {-| Add a column of data to a table. The first parameter is the name to give the
 column. The second is a list of column values. If the table already has a column
 with this name, it will get replaced with the given data. To ensure table rows are
@@ -298,22 +319,7 @@ to match the number of rows in the table.
 -}
 insertColumn : String -> List String -> Table -> Table
 insertColumn heading colValues tbl =
-    let
-        numRows =
-            if getColumns tbl == Dict.empty then
-                List.length colValues
-
-            else
-                List.foldl (max << List.length) 0 (Dict.values (getColumns tbl))
-
-        extraRows =
-            List.repeat (List.length colValues - numRows) ""
-
-        numCols =
-            Dict.size (getColumns tbl)
-    in
-    getColumns tbl
-        |> Dict.insert ( numCols, String.trim heading ) (List.take numRows (colValues ++ extraRows))
+    insertColumnAt (Dict.size (getColumns tbl)) heading colValues (getColumns tbl)
         -- Need to compact indices in case the additional column replaces existing one.
         |> compactIndices 0
         |> toTable
@@ -730,7 +736,9 @@ leftJoin ( t1, heading1 ) ( t2, heading2 ) =
             else
                 columns |> Dict.insert ( n, label2 ) (tableCol label2)
     in
-    toTable (List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1)))))
+    List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1))))
+        |> compactIndices 0
+        |> toTable
 
 
 {-| A _right join_ preserves all the values in the second table and adds any
@@ -758,7 +766,9 @@ rightJoin =
 
 
 {-| An 'inner join' will contain only key-matched rows that are present in both tables.
-The first parameter is the name to give the new key-matched column.
+The first parameter is the name to give the new key-matched column, replacing the
+separate key names in the two tables. Where both tables share a common column name,
+only one is stored in the output.
 
     innerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
 
@@ -773,12 +783,23 @@ would generate
 
 -}
 innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
-innerJoin keyName ( t1, heading1 ) ( t2, heading2 ) =
-    -- TODO: Set key to keyname
-    -- TODO: Account for different key names in the two tables. Include descriptions in comments for what happens if both keys share a common name and if they do not.
+innerJoin keyName ( oldT1, oldKey1 ) ( oldT2, oldKey2 ) =
     let
-        keyCol colLabel =
-            case ( getColumn heading2 (getColumns t2), Dict.get colLabel (getColumns t2) ) of
+        -- Rename the two table keys to guarantee they do not clash any other key names
+        key1 =
+            keyName ++ oldKey1 ++ "1"
+
+        key2 =
+            keyName ++ oldKey2 ++ "2"
+
+        t1 =
+            oldT1 |> renameColumn oldKey1 key1
+
+        t2 =
+            oldT2 |> renameColumn oldKey2 key2
+
+        keyCol ( _, colLabel ) =
+            case ( getColumn key2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -787,11 +808,24 @@ innerJoin keyName ( t1, heading1 ) ( t2, heading2 ) =
 
         tableCol colLabel =
             List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (getColumn heading1 (getColumns t1) |> Maybe.withDefault [])
+                (getColumn key1 (getColumns t1) |> Maybe.withDefault [])
+
+        newTable =
+            -- Setting the indices of t2 to at least 99999 ensures columns are to the right of t1
+            List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices 99999))
+                |> toTable
+                |> filterRows key2 (not << String.isEmpty)
+
+        newKeyColumn =
+            strColumn key1 newTable
     in
-    List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) (getColumns t1) (Dict.keys (getColumns t2))
+    newTable
+        |> removeColumn key1
+        |> removeColumn key2
+        |> getColumns
+        |> insertColumnAt -1 keyName newKeyColumn
+        |> compactIndices 0
         |> toTable
-        |> filterRows heading2 (not << String.isEmpty)
 
 
 {-| An _outer join_ contains all rows of both joined tables.
@@ -925,6 +959,28 @@ memberColumns colName =
 remove : String -> Columns -> Columns
 remove colName =
     Dict.filter (\( _, s ) _ -> s /= colName)
+
+
+{-| Private version of insertColumn that allows a column index to be defined.
+Normally new columns are inserted at the end of existing ones (by inserting at
+Dict.size, but if we need to insert before others, we can provide a negative
+index for example.
+-}
+insertColumnAt : Int -> String -> List String -> Columns -> Columns
+insertColumnAt index heading colValues columns =
+    let
+        numRows =
+            if columns == Dict.empty then
+                List.length colValues
+
+            else
+                List.foldl (max << List.length) 0 (Dict.values columns)
+
+        extraRows =
+            List.repeat (List.length colValues - numRows) ""
+    in
+    columns
+        |> Dict.insert ( index, String.trim heading ) (List.take numRows (colValues ++ extraRows))
 
 
 

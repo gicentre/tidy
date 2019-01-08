@@ -36,19 +36,31 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "treatmenta" [ "", "16", "3" ]
                 |> Tidy.insertColumn "treatmentb" [ "2", "11", "1" ]
 
-        jTable1 =
+        jTable1DiffKey =
             Tidy.empty
                 |> Tidy.insertColumn "Key1" [ "k1", "k2", "k3", "k4" ]
                 |> Tidy.insertColumn "colA" [ "a1", "a2", "a3", "a4" ]
                 |> Tidy.insertColumn "colB" [ "b1", "b2", "b3", "b4" ]
 
-        jTable2 =
+        jTable1SameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k1", "k2", "k3", "k4" ]
+                |> Tidy.insertColumn "colA" [ "a1", "a2", "a3", "a4" ]
+                |> Tidy.insertColumn "colB" [ "b1", "b2", "b3", "b4" ]
+
+        jTable2DiffKey =
             Tidy.empty
                 |> Tidy.insertColumn "Key2" [ "k2", "k4", "k6", "k8" ]
                 |> Tidy.insertColumn "colC" [ "c2", "c4", "c6", "c8" ]
                 |> Tidy.insertColumn "colD" [ "d2", "d4", "d6", "d8" ]
 
-        ljTable =
+        jTable2SameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k2", "k4", "k6", "k8" ]
+                |> Tidy.insertColumn "colC" [ "c2", "c4", "c6", "c8" ]
+                |> Tidy.insertColumn "colD" [ "d2", "d4", "d6", "d8" ]
+
+        ljTableDiffKey =
             Tidy.empty
                 |> Tidy.insertColumn "Key1" [ "k1", "k2", "k3", "k4" ]
                 |> Tidy.insertColumn "colA" [ "a1", "a2", "a3", "a4" ]
@@ -57,7 +69,15 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "colC" [ "", "c2", "", "c4" ]
                 |> Tidy.insertColumn "colD" [ "", "d2", "", "d4" ]
 
-        rjTable =
+        ljTableSameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k1", "k2", "k3", "k4" ]
+                |> Tidy.insertColumn "colA" [ "a1", "a2", "a3", "a4" ]
+                |> Tidy.insertColumn "colB" [ "b1", "b2", "b3", "b4" ]
+                |> Tidy.insertColumn "colC" [ "", "c2", "", "c4" ]
+                |> Tidy.insertColumn "colD" [ "", "d2", "", "d4" ]
+
+        rjTableDiffKey =
             Tidy.empty
                 |> Tidy.insertColumn "Key2" [ "k2", "k4", "k6", "k8" ]
                 |> Tidy.insertColumn "colC" [ "c2", "c4", "c6", "c8" ]
@@ -66,8 +86,21 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "colA" [ "a2", "a4", "", "" ]
                 |> Tidy.insertColumn "colB" [ "b2", "b4", "", "" ]
 
+        rjTableSameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k2", "k4", "k6", "k8" ]
+                |> Tidy.insertColumn "colC" [ "c2", "c4", "c6", "c8" ]
+                |> Tidy.insertColumn "colD" [ "d2", "d4", "d6", "d8" ]
+                |> Tidy.insertColumn "colA" [ "a2", "a4", "", "" ]
+                |> Tidy.insertColumn "colB" [ "b2", "b4", "", "" ]
+
         ijTable =
             Tidy.empty
+                |> Tidy.insertColumn "NewKey" [ "k2", "k4" ]
+                |> Tidy.insertColumn "colA" [ "a2", "a4" ]
+                |> Tidy.insertColumn "colB" [ "b2", "b4" ]
+                |> Tidy.insertColumn "colC" [ "c2", "c4" ]
+                |> Tidy.insertColumn "colD" [ "d2", "d4" ]
 
         ojTable =
             Tidy.empty
@@ -105,11 +138,29 @@ treatmentb, 2, 11, 1"""
                     table4 |> Expect.equal (Tidy.transposeTable "Treatment" "Person" table1)
             ]
         , describe "joining"
-            [ test "leftJoin" <|
+            [ test "leftJoinDiffKey" <|
                 \_ ->
-                    Tidy.leftJoin ( jTable1, "Key1" ) ( jTable2, "Key2" ) |> Expect.equal ljTable
-            , test "rightJoin" <|
+                    Tidy.leftJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ljTableDiffKey
+            , test "rightJoinDiffKey" <|
                 \_ ->
-                    Tidy.rightJoin ( jTable1, "Key1" ) ( jTable2, "Key2" ) |> Expect.equal rjTable
+                    Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rjTableDiffKey
+            , test "leftJoinSameKey" <|
+                \_ ->
+                    Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ljTableSameKey
+            , test "rightJoinSameKey" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal rjTableSameKey
+            , test "reflexiveLeftJoin" <|
+                \_ ->
+                    Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
+            , test "reflexiveRightJoin" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable1DiffKey, "Key1" ) |> Expect.equal jTable1DiffKey
+            , test "innerJoinDiffKey" <|
+                \_ ->
+                    Tidy.innerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ijTable
+            , test "innerJoinSameKey" <|
+                \_ ->
+                    Tidy.innerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ijTable
             ]
         ]
