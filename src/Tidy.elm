@@ -75,21 +75,21 @@ joining two input tables as follows with shared key values k2 and k4:
 ```markdown
 table1:
 
-| Key1 | colLabelA | colLabelB |
-| ---- | --------- | --------- |
-| k1   | a1        | b1        |
-| k2   | a2        | b2        |
-| k3   | a3        | b3        |
-| k4   | a4        | b4        |
+| Key1 | colA | colB |
+| ---- | ---- | ---- |
+| k1   | a1   | b1   |
+| k2   | a2   | b2   |
+| k3   | a3   | b3   |
+| k4   | a4   | b4   |
 
 table2:
 
-| Key2 | colLabelC | colLabelD |
-| ---- | --------- | --------- |
-| k2   | c2        | d2        |
-| k4   | c4        | d4        |
-| k6   | c6        | d6        |
-| k8   | c8        | d8        |
+| Key2 | colC | colD |
+| ---- | ---- | ---- |
+| k2   | c2   | d2   |
+| k4   | c4   | d4   |
+| k6   | c6   | d6   |
+| k8   | c8   | d8   |
 ```
 
 @docs leftJoin
@@ -315,7 +315,7 @@ insertColumn heading colValues tbl =
     getColumns tbl
         |> Dict.insert ( numCols, String.trim heading ) (List.take numRows (colValues ++ extraRows))
         -- Need to compact indices in case the additional column replaces existing one.
-        |> compactIndices
+        |> compactIndices 0
         |> toTable
 
 
@@ -324,7 +324,7 @@ in the table, the original table is returned.
 -}
 removeColumn : String -> Table -> Table
 removeColumn colName =
-    getColumns >> remove colName >> compactIndices >> toTable
+    getColumns >> remove colName >> compactIndices 0 >> toTable
 
 
 {-| Extract the values of the column with the given name (first parameter) from a
@@ -472,10 +472,10 @@ where `table` stores:
 creates the following table:
 
 ```markdown
-| temperature     | Bristol | Glasgow | Sheffield
-| --------------- | ------- | ------- | --------- |
-| temperature2017 | 12      | 8       | 11        |
-| temperature2018 | 14      | 9       | 13        |
+| temperature     | Bristol | Sheffield | Glasgow |
+| --------------- | ------- | --------- | ------- |
+| temperature2017 | 12      | 11        | 8       |
+| temperature2018 | 14      | 13        | 9       |
 ```
 
 If the column to contain new headings cannot be found, an empty table is generated.
@@ -626,7 +626,7 @@ melt columnName valueName colVars table =
                 row ->
                     extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
     in
-    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices |> toTable
+    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices 0 |> toTable
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
@@ -686,34 +686,33 @@ filterColumns : (String -> Bool) -> Table -> Table
 filterColumns fn =
     getColumns
         >> Dict.filter (\( _, colHeading ) _ -> fn colHeading)
-        >> compactIndices
+        >> compactIndices 0
         >> toTable
 
 
 {-| A _left join_ preserves all the values in the first table and adds any key-matched
 values from columns in the second table to it. Where both tables share common column
-names, only those in the left (first) table are stored in the output.
+names, including key columns, only those in the left (first) table are stored in the output.
 
     leftJoin ( table1, "Key1" ) ( table2, "Key2" )
 
 would generate
 
 ```markdown
-| Key1 | colA | colB | colC | colD |
-| ---- | ---- | ---- | ---- | ---- |
-| k1   | a1   | b1   |      |      |
-| k2   | a2   | b2   | c2   | d2   |
-| k3   | a3   | b3   |      |      |
-| k4   | a4   | b4   | c4   | d4   |
+| Key1 | colA | colB | Key2 | colC | colD |
+| ---- | ---- | ---- | --- | ---- | ---- |
+| k1   | a1   | b1   |     |      |      |
+| k2   | a2   | b2   | k2  | c2   | d2   |
+| k3   | a3   | b3   |     |      |      |
+| k4   | a4   | b4   | k4  | c4   | d4   |
 ```
 
 -}
 leftJoin : ( Table, String ) -> ( Table, String ) -> Table
 leftJoin ( t1, heading1 ) ( t2, heading2 ) =
-    -- TODO: Account for different key names in the two tables. Include descriptions in comments for what happens if both keys share a common name and if they do not.
     let
         keyCol colLabel =
-            case ( getColumn heading2 (getColumns t2), Dict.get colLabel (getColumns t2) ) of
+            case ( getColumn heading2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
                 ( Just ks, Just vs ) ->
                     Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -721,42 +720,40 @@ leftJoin ( t1, heading1 ) ( t2, heading2 ) =
                     Dict.empty
 
         tableCol colLabel =
-            List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
+            List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
                 (getColumn heading1 (getColumns t1) |> Maybe.withDefault [])
 
-        leftInsert label2 columns =
-            if Dict.member label2 columns then
+        leftInsert ( n, label2 ) columns =
+            if memberColumns label2 columns then
                 columns
 
             else
-                columns |> Dict.insert label2 (tableCol label2)
-
-        -- TODO: Need to reallocate column indices to preserve column orders (left table then right table) by adding size of t1 to all column indices of t2
+                columns |> Dict.insert ( n, label2 ) (tableCol label2)
     in
-    toTable (List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2)))
+    toTable (List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1)))))
 
 
-{-| A _right join_ preserves all the values in the second table and adds any key-matched
-values from columns in the first table to it. Where both tables share common column
-names, only those in the right (second) table are stored in the output.
+{-| A _right join_ preserves all the values in the second table and adds any
+key-matched values from columns in the first table to it. Where both tables share
+common column names, including key columns, only those in the right (second) table
+are stored in the output.
 
     rightJoin ( table1, "Key1" ) ( table2, "Key2" )
 
 would generate
 
 ```markdown
-| Key2 | colA | colB | colC | colD |
-| ---- | ---- | ---- | ---- | ---- |
-| k2   | a2   | b2   | c2   | d2   |
-| k4   | a4   | b4   | c4   | d4   |
-| k6   |      |      | c6   | d6   |
-| k8   |      |      | c8   | d8   |
+| Key2 | colC | colD | Key1 | colA | colB |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| k2   | c2   | d2   | k2   | a2   | b2   |
+| k4   | c4   | d4   | k4   | a4   | b4   |
+| k6   | c6   | d6   |      |      |      |
+| k8   | c8   | d8   |      |      |      |
 ```
 
 -}
 rightJoin : ( Table, String ) -> ( Table, String ) -> Table
 rightJoin =
-    -- TODO: Account for different key names in the two tables. Include descriptions in comments for what happens if both keys share a common name and if they do not.
     flip leftJoin
 
 
@@ -895,7 +892,7 @@ columnsHead columns =
 
 
 getColumn : String -> Columns -> Maybe (List String)
-getColumn colName columns =
+getColumn colName =
     Dict.foldl
         (\( _, s ) v acc ->
             case acc of
@@ -910,7 +907,15 @@ getColumn colName columns =
                         Nothing
         )
         Nothing
-        columns
+
+
+
+{- Like Dict.member but ignores the ordering index in the key tuple. -}
+
+
+memberColumns : String -> Columns -> Bool
+memberColumns colName =
+    Dict.keys >> List.map Tuple.second >> List.member colName
 
 
 
@@ -926,10 +931,10 @@ remove colName =
 {- Re-compute column indices from 0 to (numCols-1) while preserving current order. -}
 
 
-compactIndices : Columns -> Columns
-compactIndices =
+compactIndices : Int -> Columns -> Columns
+compactIndices startIndex =
     Dict.foldl
-        (\( _, colHeading ) v acc -> Dict.insert ( Dict.size acc, colHeading ) v acc)
+        (\( _, colHeading ) v acc -> Dict.insert ( startIndex + Dict.size acc, colHeading ) v acc)
         Dict.empty
 
 
