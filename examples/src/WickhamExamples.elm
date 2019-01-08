@@ -16,20 +16,21 @@ update msg model =
 
 view model =
     div []
-        [ h1 [] [ text "Examples from Wickham (2014)" ]
-        , h2 [] [ text "Messy Table 1" ]
+        [ h2 [] [ text "Messy table (table 1)" ]
         , messy1 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "tidied as Table 3" ]
+        , h2 [] [ text "Transposed messy table (table 2)" ]
+        , messy2 |> tableSummary -1 |> toHtml
+        , h2 [] [ text "Tidied table (table 3)" ]
         , tidy3 |> tableSummary -1 |> toHtml
         , hr [] []
-        , h2 [] [ text "Messy Table 4" ]
+        , h2 [] [ text "Messy table (table 4)" ]
         , messy4 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "tidied as Table 6" ]
+        , h2 [] [ text "Tidied table  (table 6)" ]
         , tidy6 |> tableSummary -1 |> toHtml
         , hr [] []
-        , h2 [] [ text "Messy Table 7" ]
+        , h2 [] [ text "Messy table (table 7)" ]
         , messy7 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "tidied as Table 8" ]
+        , h2 [] [ text "Tidied table (table 8)" ]
         , tidy8 |> tableSummary -1 |> toHtml
         , hr [] []
         ]
@@ -40,35 +41,37 @@ messy1 =
     """Person,treatmenta,treatmentb
 John Smith, , 2
 Jane Doe, 16, 11
-Mary Johnson, 3,
+Mary Johnson, 3, 1
 """
         |> fromCSV
+
+
+messy2 : Table
+messy2 =
+    messy1
+        |> transposeTable "Person" "Treatment"
 
 
 tidy3 : Table
 tidy3 =
     messy1
-        |> melt "Treatment"
-            "result"
-            [ ( "treatmenta", "a" )
-            , ( "treatmentb", "b" )
-            ]
+        |> melt "Treatment" "result" [ ( "treatmenta", "a" ), ( "treatmentb", "b" ) ]
 
 
 messy4 : Table
 messy4 =
     """
-Religion,income0-10k,income10-20k,income20-30k,income30-40k,income40-50k,income50-75k
-Agnostic,                 27,  34,   60,  81,  76,  137
-Atheist,                  12,  27,   37,  52,  35,   70
-Buddhist,                 27,  21,   30,  34,  33,   58
-Catholic,                418, 617,  732, 670, 638, 1116
-Don't know/refused,       15,  14,   15,  11,  10,   35
-Evangelical Prot,        575, 869, 1064, 982, 881, 1486
-Hindu,                     1,   9,    7,   9,  11,   34
-Historically Black Prot, 228, 224,  236, 238, 197,  223
-Jehovah's Witness,        20,  27,   24,  24,  21,   30
-Jewish,                   19,  19,   25,  25,  30,   95
+Religion,<$10k,$10-20k,$20-30k,$30-40k,$40-50k,$50-75k,$75-100k,$100-150k,>150k,Don't know/refused
+Agnostic,                 27,  34,   60,  81,  76,  137, 122, 109,  84,   96
+Atheist,                  12,  27,   37,  52,  35,   70,  73,  59,  74,   76
+Buddhist,                 27,  21,   30,  34,  33,   58,  62,  39,  53,   54
+Catholic,                418, 617,  732, 670, 638, 1116, 949, 792, 633, 1489
+Don't know/refused,       15,  14,   15,  11,  10,   35,  21,  17,  18,  116
+Evangelical Prot,        575, 869, 1064, 982, 881, 1486, 949, 723, 414, 1529
+Hindu,                     1,   9,    7,   9,  11,   34,  47,  48,  54,   37
+Historically Black Prot, 228, 224,  236, 238, 197,  223, 131,  81,  78,  339
+Jehovah's Witness,        20,  27,   24,  24,  21,   30,  15,  11,   6,   37
+Jewish,                   19,  19,   25,  25,  30,   95,  69,  87, 151,  162
 """
         |> fromCSV
 
@@ -78,12 +81,16 @@ tidy6 =
     messy4
         |> melt "Income"
             "freq"
-            [ ( "income0-10k", "$0-10k" )
-            , ( "income10-20k", "$10-20k" )
-            , ( "income20-30k", "$20-30k" )
-            , ( "income30-40k", "$30-40k" )
-            , ( "income40-50k", "$40-50k" )
-            , ( "income50-75k", "$50-75k" )
+            [ ( "<$10k", "<$10k" )
+            , ( "$10-20k", "$10-20k" )
+            , ( "$20-30k", "$20-30k" )
+            , ( "$30-40k", "$30-40k" )
+            , ( "$40-50k", "$40-50k" )
+            , ( "$50-75k", "$50-75k" )
+            , ( "$75-100k", "$75-100k" )
+            , ( "$100-150k", "$100-150k" )
+            , ( ">150k", ">150k" )
+            , ( "Don't know/refused", "Don't know/refused" )
             ]
 
 

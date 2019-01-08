@@ -4958,6 +4958,10 @@ var elm$core$List$take = F2(
 		return A3(elm$core$List$takeFast, 0, n, list);
 	});
 var elm$core$String$fromInt = _String_fromNumber;
+var elm$core$Tuple$second = function (_n0) {
+	var y = _n0.b;
+	return y;
+};
 var author$project$Tidy$tableSummary = F2(
 	function (maxRows, tbl) {
 		var numTableRows = A3(
@@ -4997,8 +5001,11 @@ var author$project$Tidy$tableSummary = F2(
 				elm$core$Dict$keys(
 					author$project$Tidy$getColumns(tbl))));
 		var headings = addDividers(
-			elm$core$Dict$keys(
-				author$project$Tidy$getColumns(tbl)));
+			A2(
+				elm$core$List$map,
+				elm$core$Tuple$second,
+				elm$core$Dict$keys(
+					author$project$Tidy$getColumns(tbl))));
 		var values = elm$core$List$concat(
 			A2(
 				elm$core$List$map,
@@ -5181,12 +5188,48 @@ var elm$core$List$filterMap = F2(
 			_List_Nil,
 			xs);
 	});
+var elm$core$List$rangeHelp = F3(
+	function (lo, hi, list) {
+		rangeHelp:
+		while (true) {
+			if (_Utils_cmp(lo, hi) < 1) {
+				var $temp$lo = lo,
+					$temp$hi = hi - 1,
+					$temp$list = A2(elm$core$List$cons, hi, list);
+				lo = $temp$lo;
+				hi = $temp$hi;
+				list = $temp$list;
+				continue rangeHelp;
+			} else {
+				return list;
+			}
+		}
+	});
+var elm$core$List$range = F2(
+	function (lo, hi) {
+		return A3(elm$core$List$rangeHelp, lo, hi, _List_Nil);
+	});
+var elm$core$List$indexedMap = F2(
+	function (f, xs) {
+		return A3(
+			elm$core$List$map2,
+			f,
+			A2(
+				elm$core$List$range,
+				0,
+				elm$core$List$length(xs) - 1),
+			xs);
+	});
 var elm$core$Basics$eq = _Utils_equal;
 var elm$core$String$isEmpty = function (string) {
 	return string === '';
 };
 var elm$core$String$lines = _String_lines;
 var elm$core$String$trim = _String_trim;
+var elm$core$Tuple$pair = F2(
+	function (a, b) {
+		return _Utils_Tuple2(a, b);
+	});
 var elm$regex$Regex$Match = F4(
 	function (match, index, number, submatches) {
 		return {ax: index, az: match, aB: number, aI: submatches};
@@ -5219,12 +5262,16 @@ var author$project$Tidy$fromCSV = function () {
 				elm$core$List$filterMap(elm$core$Basics$identity)));
 	};
 	var addEntry = function (xs) {
-		if (xs.b) {
-			var hd = xs.a;
-			var tl = xs.b;
+		if (xs.b.b) {
+			var n = xs.a;
+			var _n1 = xs.b;
+			var hd = _n1.a;
+			var tl = _n1.b;
 			return A2(
 				elm$core$Dict$insert,
-				elm$core$String$trim(hd),
+				_Utils_Tuple2(
+					n,
+					elm$core$String$trim(hd)),
 				A2(elm$core$List$map, elm$core$String$trim, tl));
 		} else {
 			return elm$core$Basics$identity;
@@ -5252,12 +5299,42 @@ var author$project$Tidy$fromCSV = function () {
 						author$project$Tidy$transpose,
 						A2(
 							elm$core$Basics$composeR,
-							A2(elm$core$List$foldl, addEntry, elm$core$Dict$empty),
-							author$project$Tidy$toTable))))));
+							elm$core$List$indexedMap(elm$core$Tuple$pair),
+							A2(
+								elm$core$Basics$composeR,
+								A2(elm$core$List$foldl, addEntry, elm$core$Dict$empty),
+								author$project$Tidy$toTable)))))));
 }();
-var author$project$WickhamExamples$messy1 = author$project$Tidy$fromCSV('Person,treatmenta,treatmentb\nJohn Smith, , 2\nJane Doe, 16, 11\nMary Johnson, 3,\n');
-var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nReligion,income0-10k,income10-20k,income20-30k,income30-40k,income40-50k,income50-75k\nAgnostic,                 27,  34,   60,  81,  76,  137\nAtheist,                  12,  27,   37,  52,  35,   70\nBuddhist,                 27,  21,   30,  34,  33,   58\nCatholic,                418, 617,  732, 670, 638, 1116\nDon\'t know/refused,       15,  14,   15,  11,  10,   35\nEvangelical Prot,        575, 869, 1064, 982, 881, 1486\nHindu,                     1,   9,    7,   9,  11,   34\nHistorically Black Prot, 228, 224,  236, 238, 197,  223\nJehovah\'s Witness,        20,  27,   24,  24,  21,   30\nJewish,                   19,  19,   25,  25,  30,   95\n');
-var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear, artist,           track,                  time, date.entered, wk1, wk2, wk3\n2000, 2 Pac,            Baby Don\'t Cry,         4:22, 2000-02-26,   87,  82,  72\n2000, 2Ge+her,          The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92\n2000, 3 Doors Down,     Kryptonite,             3:15, 2000-04-08,   81,  70,  68\n2000, 98^0,             Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34\n2000, A*Teens,          Dancing Queen,          3:44, 2000-07-08,   97,  97,  96\n2000, Aaliyah,          I Don\'t Wanna,          4:15, 2000-01-29,   84,  62,  51\n2000, Aaliyah,          Try Again,              4:03, 2000-03-18,   59,  53,  38\n2000, "Adams, Yolanda", Open My Heart,          5:30, 2000-08-26,   76,  76,  74\n');
+var author$project$WickhamExamples$messy1 = author$project$Tidy$fromCSV('Person,treatmenta,treatmentb\nJohn Smith, , 2\nJane Doe, 16, 11\nMary Johnson, 3, 1\n');
+var author$project$Tidy$addColumn = F3(
+	function (heading, colValues, tbl) {
+		var numRows = _Utils_eq(
+			author$project$Tidy$getColumns(tbl),
+			elm$core$Dict$empty) ? elm$core$List$length(colValues) : A3(
+			elm$core$List$foldl,
+			A2(elm$core$Basics$composeL, elm$core$Basics$max, elm$core$List$length),
+			0,
+			elm$core$Dict$values(
+				author$project$Tidy$getColumns(tbl)));
+		var numCols = elm$core$Dict$size(
+			author$project$Tidy$getColumns(tbl));
+		var extraRows = A2(
+			elm$core$List$repeat,
+			elm$core$List$length(colValues) - numRows,
+			'');
+		return author$project$Tidy$toTable(
+			A3(
+				elm$core$Dict$insert,
+				_Utils_Tuple2(
+					numCols,
+					elm$core$String$trim(heading)),
+				A2(
+					elm$core$List$take,
+					numRows,
+					_Utils_ap(colValues, extraRows)),
+				author$project$Tidy$getColumns(tbl)));
+	});
+var author$project$Tidy$empty = author$project$Tidy$toTable(elm$core$Dict$empty);
 var elm$core$Dict$foldl = F3(
 	function (func, acc, dict) {
 		foldl:
@@ -5283,6 +5360,133 @@ var elm$core$Dict$foldl = F3(
 			}
 		}
 	});
+var author$project$Tidy$getColumn = F2(
+	function (colName, columns) {
+		return A3(
+			elm$core$Dict$foldl,
+			F3(
+				function (_n0, v, acc) {
+					var s = _n0.b;
+					if (!acc.$) {
+						return acc;
+					} else {
+						return _Utils_eq(s, colName) ? elm$core$Maybe$Just(v) : elm$core$Maybe$Nothing;
+					}
+				}),
+			elm$core$Maybe$Nothing,
+			columns);
+	});
+var elm$core$Basics$neq = _Utils_notEqual;
+var elm$core$Dict$filter = F2(
+	function (isGood, dict) {
+		return A3(
+			elm$core$Dict$foldl,
+			F3(
+				function (k, v, d) {
+					return A2(isGood, k, v) ? A3(elm$core$Dict$insert, k, v, d) : d;
+				}),
+			elm$core$Dict$empty,
+			dict);
+	});
+var author$project$Tidy$removeColumn = function (colName) {
+	return elm$core$Dict$filter(
+		F2(
+			function (_n0, _n1) {
+				var s = _n0.b;
+				return !_Utils_eq(s, colName);
+			}));
+};
+var elm$core$Dict$get = F2(
+	function (targetKey, dict) {
+		get:
+		while (true) {
+			if (dict.$ === -2) {
+				return elm$core$Maybe$Nothing;
+			} else {
+				var key = dict.b;
+				var value = dict.c;
+				var left = dict.d;
+				var right = dict.e;
+				var _n1 = A2(elm$core$Basics$compare, targetKey, key);
+				switch (_n1) {
+					case 0:
+						var $temp$targetKey = targetKey,
+							$temp$dict = left;
+						targetKey = $temp$targetKey;
+						dict = $temp$dict;
+						continue get;
+					case 1:
+						return elm$core$Maybe$Just(value);
+					default:
+						var $temp$targetKey = targetKey,
+							$temp$dict = right;
+						targetKey = $temp$targetKey;
+						dict = $temp$dict;
+						continue get;
+				}
+			}
+		}
+	});
+var author$project$Tidy$transposeTable = F3(
+	function (headingColumn, rowName, tbl) {
+		var colToList = F2(
+			function (heading, columns) {
+				return A2(
+					elm$core$List$cons,
+					heading,
+					A2(
+						elm$core$Maybe$withDefault,
+						_List_Nil,
+						A2(elm$core$Dict$get, heading, columns)));
+			});
+		var _n0 = A2(
+			author$project$Tidy$getColumn,
+			headingColumn,
+			author$project$Tidy$getColumns(tbl));
+		if (!_n0.$) {
+			var newHeadings = _n0.a;
+			var body = A2(
+				author$project$Tidy$removeColumn,
+				headingColumn,
+				author$project$Tidy$getColumns(tbl));
+			var trBody = author$project$Tidy$transpose(
+				A2(
+					elm$core$List$cons,
+					A2(elm$core$List$cons, rowName, newHeadings),
+					A2(
+						elm$core$List$map,
+						function (_n2) {
+							var k = _n2.b;
+							return A2(
+								elm$core$List$cons,
+								k,
+								A2(
+									elm$core$Maybe$withDefault,
+									_List_Nil,
+									A2(author$project$Tidy$getColumn, k, body)));
+						},
+						elm$core$Dict$keys(body))));
+			return A3(
+				elm$core$List$foldl,
+				F2(
+					function (cells, t) {
+						if (cells.b) {
+							var hd = cells.a;
+							var tl = cells.b;
+							return A3(author$project$Tidy$addColumn, hd, tl, t);
+						} else {
+							return t;
+						}
+					}),
+				author$project$Tidy$empty,
+				trBody);
+		} else {
+			return author$project$Tidy$empty;
+		}
+	});
+var author$project$WickhamExamples$messy2 = A3(author$project$Tidy$transposeTable, 'Person', 'Treatment', author$project$WickhamExamples$messy1);
+var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nReligion,<$10k,$10-20k,$20-30k,$30-40k,$40-50k,$50-75k,$75-100k,$100-150k,>150k,Don\'t know/refused\nAgnostic,                 27,  34,   60,  81,  76,  137, 122, 109,  84,   96\nAtheist,                  12,  27,   37,  52,  35,   70,  73,  59,  74,   76\nBuddhist,                 27,  21,   30,  34,  33,   58,  62,  39,  53,   54\nCatholic,                418, 617,  732, 670, 638, 1116, 949, 792, 633, 1489\nDon\'t know/refused,       15,  14,   15,  11,  10,   35,  21,  17,  18,  116\nEvangelical Prot,        575, 869, 1064, 982, 881, 1486, 949, 723, 414, 1529\nHindu,                     1,   9,    7,   9,  11,   34,  47,  48,  54,   37\nHistorically Black Prot, 228, 224,  236, 238, 197,  223, 131,  81,  78,  339\nJehovah\'s Witness,        20,  27,   24,  24,  21,   30,  15,  11,   6,   37\nJewish,                   19,  19,   25,  25,  30,   95,  69,  87, 151,  162\n');
+var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear, artist,           track,                  time, date.entered, wk1, wk2, wk3\n2000, 2 Pac,            Baby Don\'t Cry,         4:22, 2000-02-26,   87,  82,  72\n2000, 2Ge+her,          The Hardest Part Of..., 3:15, 2000-09-02,   91,  87,  92\n2000, 3 Doors Down,     Kryptonite,             3:15, 2000-04-08,   81,  70,  68\n2000, 98^0,             Give Me Just One Night, 3:24, 2000-08-19,   51,  39,  34\n2000, A*Teens,          Dancing Queen,          3:44, 2000-07-08,   97,  97,  96\n2000, Aaliyah,          I Don\'t Wanna,          4:15, 2000-01-29,   84,  62,  51\n2000, Aaliyah,          Try Again,              4:03, 2000-03-18,   59,  53,  38\n2000, "Adams, Yolanda", Open My Heart,          5:30, 2000-08-26,   76,  76,  74\n');
 var author$project$Tidy$columnsHead = function (columns) {
 	return (!A3(
 		elm$core$List$foldl,
@@ -5358,37 +5562,6 @@ var elm$core$Dict$fromList = function (assocs) {
 		elm$core$Dict$empty,
 		assocs);
 };
-var elm$core$Dict$get = F2(
-	function (targetKey, dict) {
-		get:
-		while (true) {
-			if (dict.$ === -2) {
-				return elm$core$Maybe$Nothing;
-			} else {
-				var key = dict.b;
-				var value = dict.c;
-				var left = dict.d;
-				var right = dict.e;
-				var _n1 = A2(elm$core$Basics$compare, targetKey, key);
-				switch (_n1) {
-					case 0:
-						var $temp$targetKey = targetKey,
-							$temp$dict = left;
-						targetKey = $temp$targetKey;
-						dict = $temp$dict;
-						continue get;
-					case 1:
-						return elm$core$Maybe$Just(value);
-					default:
-						var $temp$targetKey = targetKey,
-							$temp$dict = right;
-						targetKey = $temp$targetKey;
-						dict = $temp$dict;
-						continue get;
-				}
-			}
-		}
-	});
 var elm$core$Basics$True = 0;
 var elm$core$List$any = F2(
 	function (isOkay, list) {
@@ -5424,12 +5597,10 @@ var elm$core$Tuple$first = function (_n0) {
 	var x = _n0.a;
 	return x;
 };
-var elm$core$Tuple$second = function (_n0) {
-	var y = _n0.b;
-	return y;
-};
 var author$project$Tidy$melt = F4(
 	function (columnName, valueName, colVars, table) {
+		var numCols = elm$core$Dict$size(
+			author$project$Tidy$getColumns(table));
 		var emptyColumns = elm$core$Dict$fromList(
 			A2(
 				elm$core$List$map,
@@ -5438,10 +5609,14 @@ var author$project$Tidy$melt = F4(
 				},
 				_Utils_ap(
 					_List_fromArray(
-						[columnName, valueName]),
+						[
+							_Utils_Tuple2(numCols, columnName),
+							_Utils_Tuple2(numCols + 1, valueName)
+						]),
 					A2(
 						elm$core$List$filter,
-						function (s) {
+						function (_n9) {
+							var s = _n9.b;
 							return !A2(
 								elm$core$List$member,
 								s,
@@ -5451,16 +5626,20 @@ var author$project$Tidy$melt = F4(
 							author$project$Tidy$getColumns(table))))));
 		var colToVarLookup = elm$core$Dict$fromList(colVars);
 		var newRows = function (columns) {
-			var unmeltedCol = function (_n6) {
-				var oldHeading = _n6.a;
-				var val = _n6.b;
-				var _n5 = A2(elm$core$Dict$get, oldHeading, colToVarLookup);
-				if (!_n5.$) {
-					var colRef = _n5.a;
+			var unmeltedCol = function (_n7) {
+				var _n8 = _n7.a;
+				var n = _n8.a;
+				var oldHeading = _n8.b;
+				var val = _n7.b;
+				var _n6 = A2(elm$core$Dict$get, oldHeading, colToVarLookup);
+				if (!_n6.$) {
+					var colRef = _n6.a;
 					return elm$core$Maybe$Nothing;
 				} else {
 					return elm$core$Maybe$Just(
-						_Utils_Tuple2(oldHeading, val));
+						_Utils_Tuple2(
+							_Utils_Tuple2(n, oldHeading),
+							val));
 				}
 			};
 			var unmeltedCols = A2(
@@ -5468,7 +5647,8 @@ var author$project$Tidy$melt = F4(
 				unmeltedCol,
 				author$project$Tidy$columnsHead(columns));
 			var meltCol = function (_n4) {
-				var oldHeading = _n4.a;
+				var _n5 = _n4.a;
+				var oldHeading = _n5.b;
 				var val = _n4.b;
 				var _n3 = A2(elm$core$Dict$get, oldHeading, colToVarLookup);
 				if (!_n3.$) {
@@ -5476,8 +5656,12 @@ var author$project$Tidy$melt = F4(
 					return elm$core$Maybe$Just(
 						_List_fromArray(
 							[
-								_Utils_Tuple2(columnName, colRef),
-								_Utils_Tuple2(valueName, val)
+								_Utils_Tuple2(
+								_Utils_Tuple2(numCols, columnName),
+								colRef),
+								_Utils_Tuple2(
+								_Utils_Tuple2(numCols + 1, valueName),
+								val)
 							]));
 				} else {
 					return elm$core$Maybe$Nothing;
@@ -5562,25 +5746,18 @@ var author$project$WickhamExamples$tidy6 = A4(
 	'freq',
 	_List_fromArray(
 		[
-			_Utils_Tuple2('income0-10k', '$0-10k'),
-			_Utils_Tuple2('income10-20k', '$10-20k'),
-			_Utils_Tuple2('income20-30k', '$20-30k'),
-			_Utils_Tuple2('income30-40k', '$30-40k'),
-			_Utils_Tuple2('income40-50k', '$40-50k'),
-			_Utils_Tuple2('income50-75k', '$50-75k')
+			_Utils_Tuple2('<$10k', '<$10k'),
+			_Utils_Tuple2('$10-20k', '$10-20k'),
+			_Utils_Tuple2('$20-30k', '$20-30k'),
+			_Utils_Tuple2('$30-40k', '$30-40k'),
+			_Utils_Tuple2('$40-50k', '$40-50k'),
+			_Utils_Tuple2('$50-75k', '$50-75k'),
+			_Utils_Tuple2('$75-100k', '$75-100k'),
+			_Utils_Tuple2('$100-150k', '$100-150k'),
+			_Utils_Tuple2('>150k', '>150k'),
+			_Utils_Tuple2('Don\'t know/refused', 'Don\'t know/refused')
 		]),
 	author$project$WickhamExamples$messy4);
-var elm$core$Dict$filter = F2(
-	function (isGood, dict) {
-		return A3(
-			elm$core$Dict$foldl,
-			F3(
-				function (k, v, d) {
-					return A2(isGood, k, v) ? A3(elm$core$Dict$insert, k, v, d) : d;
-				}),
-			elm$core$Dict$empty,
-			dict);
-	});
 var author$project$Tidy$filterColumns = function (fn) {
 	return A2(
 		elm$core$Basics$composeR,
@@ -5589,12 +5766,12 @@ var author$project$Tidy$filterColumns = function (fn) {
 			elm$core$Basics$composeR,
 			elm$core$Dict$filter(
 				F2(
-					function (k, _n0) {
-						return fn(k);
+					function (_n0, _n1) {
+						var colHeading = _n0.b;
+						return fn(colHeading);
 					})),
 			author$project$Tidy$toTable));
 };
-var elm$core$Basics$neq = _Utils_notEqual;
 var author$project$WickhamExamples$tidy8 = A2(
 	author$project$Tidy$filterColumns,
 	elm$core$Basics$neq('date.entered'),
@@ -5806,38 +5983,6 @@ var elm$core$Char$isDigit = function (_char) {
 var elm$core$Char$isAlphaNum = function (_char) {
 	return elm$core$Char$isLower(_char) || (elm$core$Char$isUpper(_char) || elm$core$Char$isDigit(_char));
 };
-var elm$core$List$rangeHelp = F3(
-	function (lo, hi, list) {
-		rangeHelp:
-		while (true) {
-			if (_Utils_cmp(lo, hi) < 1) {
-				var $temp$lo = lo,
-					$temp$hi = hi - 1,
-					$temp$list = A2(elm$core$List$cons, hi, list);
-				lo = $temp$lo;
-				hi = $temp$hi;
-				list = $temp$list;
-				continue rangeHelp;
-			} else {
-				return list;
-			}
-		}
-	});
-var elm$core$List$range = F2(
-	function (lo, hi) {
-		return A3(elm$core$List$rangeHelp, lo, hi, _List_Nil);
-	});
-var elm$core$List$indexedMap = F2(
-	function (f, xs) {
-		return A3(
-			elm$core$List$map2,
-			f,
-			A2(
-				elm$core$List$range,
-				0,
-				elm$core$List$length(xs) - 1),
-			xs);
-	});
 var elm$core$String$all = _String_all;
 var elm$core$String$uncons = _String_uncons;
 var elm$core$String$split = F2(
@@ -5988,7 +6133,6 @@ var elm$core$Basics$negate = function (n) {
 	return -n;
 };
 var elm$html$Html$div = _VirtualDom_node('div');
-var elm$html$Html$h1 = _VirtualDom_node('h1');
 var elm$html$Html$h2 = _VirtualDom_node('h2');
 var elm$html$Html$hr = _VirtualDom_node('hr');
 var elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
@@ -6000,18 +6144,11 @@ var author$project$WickhamExamples$view = function (model) {
 		_List_fromArray(
 			[
 				A2(
-				elm$html$Html$h1,
-				_List_Nil,
-				_List_fromArray(
-					[
-						elm$html$Html$text('Examples from Wickham (2014)')
-					])),
-				A2(
 				elm$html$Html$h2,
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Messy Table 1')
+						elm$html$Html$text('Messy table (table 1)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$messy1)),
@@ -6020,7 +6157,16 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('tidied as Table 3')
+						elm$html$Html$text('Transposed messy table (table 2)')
+					])),
+				author$project$WickhamExamples$toHtml(
+				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$messy2)),
+				A2(
+				elm$html$Html$h2,
+				_List_Nil,
+				_List_fromArray(
+					[
+						elm$html$Html$text('Tidied table (table 3)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy3)),
@@ -6030,7 +6176,7 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Messy Table 4')
+						elm$html$Html$text('Messy table (table 4)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$messy4)),
@@ -6039,7 +6185,7 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('tidied as Table 6')
+						elm$html$Html$text('Tidied table  (table 6)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy6)),
@@ -6049,7 +6195,7 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Messy Table 7')
+						elm$html$Html$text('Messy table (table 7)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$messy7)),
@@ -6058,7 +6204,7 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('tidied as Table 8')
+						elm$html$Html$text('Tidied table (table 8)')
 					])),
 				author$project$WickhamExamples$toHtml(
 				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy8)),
