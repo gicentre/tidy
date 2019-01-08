@@ -1,6 +1,5 @@
 module Tidy exposing
     ( Table
-    , Cell
     , fromCSV
     , fromGridText
     , fromGridLists
@@ -26,10 +25,9 @@ module Tidy exposing
 {-| A collection of utilities for representing tabular data and reshaping them.
 
 @docs Table
-@docs Cell
 
 
-## Create
+# Create
 
 @docs fromCSV
 @docs fromGridText
@@ -37,7 +35,7 @@ module Tidy exposing
 @docs empty
 
 
-## Edit
+# Edit
 
 @docs insertRow
 @docs filterRows
@@ -47,7 +45,7 @@ module Tidy exposing
 @docs filterColumns
 
 
-## Tidy
+# Tidy
 
 [Tidy data](https://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf)
 is a convention for organising tabular data such that columns represent _variables_
@@ -68,7 +66,7 @@ Messy data can be tidied with a small number of simple operations.
 @docs transposeTable
 
 
-## Table Joining
+# Join
 
 Join two tables using a common key. While not specific to tidy data, joining tidy
 tables is often more meaningful than joining messy ones. The examples below illustrate
@@ -100,12 +98,12 @@ table2:
 @docs outerJoin
 
 
-## Output
+# Output
 
 @docs tableSummary
 
 
-### Column output
+## Column output
 
 @docs numColumn
 @docs strColumn
@@ -118,7 +116,10 @@ import Dict exposing (Dict)
 import Regex
 
 
-{-| A table of data arranged in rows and columns.
+{-| A table of data arranged in rows and columns. Each column in a table has a
+unique name by which it may be referenced. Table cell values are represented as
+Strings, but can be converted to other types via column output functions
+(e.g. [numColumn](#numColumn)).
 -}
 type
     Table
@@ -126,12 +127,6 @@ type
     = Table
         { columns : Columns
         }
-
-
-{-| Type of data stored in the cells that make up a table.
--}
-type alias Cell =
-    String
 
 
 {-| Create an empty table. Useful if table items are to be added programatically
@@ -199,9 +194,9 @@ into a tidy table in the form:
 | row | col |   z |
 | --- | --- | --- |
 |   0 |   0 | z00 |
-|   0 |   1 | z00 |
-|   0 |   2 | z00 |
-|   0 |   3 | z00 |
+|   0 |   1 | z01 |
+|   0 |   2 | z02 |
+|   0 |   3 | z03 |
 |   1 |   0 | z10 |
 |   1 |   1 | z11 |
 |   : |   : |   : |
@@ -221,7 +216,7 @@ fromGridText =
         >> fromGridLists
 
 
-{-| Transform list of lists input strings in the form:
+{-| Transform list of input string lists in the form:
 
     [ [z00, z01, z02, z03, ...]
     , [z10, z11, z12, z13, ...]
@@ -236,9 +231,9 @@ into a tidy table in the form:
 | row | col |   z |
 | --- | --- | --- |
 |   0 |   0 | z00 |
-|   0 |   1 | z00 |
-|   0 |   2 | z00 |
-|   0 |   3 | z00 |
+|   0 |   1 | z01 |
+|   0 |   2 | z02 |
+|   0 |   3 | z03 |
 |   1 |   0 | z10 |
 |   1 |   1 | z11 |
 |   : |   : |   : |
@@ -337,14 +332,14 @@ table. The type of values in the column is determined by the given cell conversi
 function. The converter function should handle cases of missing data in the table
 as well as failed conversions (e.g. attempts to convert text into a number).
 
-    imputeMissing : Cell -> Int
+    imputeMissing : String -> Int
     imputeMissing =
         String.toFloat >> Maybe.withDefault 0
 
     myTable |> toColumn "count" imputeMissing
 
 -}
-toColumn : String -> (Cell -> a) -> Table -> List a
+toColumn : String -> (String -> a) -> Table -> List a
 toColumn heading converter =
     getColumns
         >> getColumn heading
@@ -555,7 +550,7 @@ example above) to be generated. The third is a list of the (columnName,columnRef
 to be melted (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2017") ]`
 above) and the final, the table to convert. For example
 
-    """location,temperature2017,temperature2017
+    """location,temperature2017,temperature2018
     Bristol,12,14
     Sheffield,11,13
     Glasgow, 8,9"""
@@ -567,7 +562,7 @@ above) and the final, the table to convert. For example
             ]
 
 -}
-melt : String -> String -> List ( String, Cell ) -> Table -> Table
+melt : String -> String -> List ( String, String ) -> Table -> Table
 melt columnName valueName colVars table =
     let
         colToVarLookup : Dict String Cell
@@ -639,7 +634,7 @@ test. The test should be a function that takes a cell value and returns either
 `True` or `False` depending on whether the row containing that value in the column
 should be retained.
 
-    isWarm : Cell -> Bool
+    isWarm : String -> Bool
     isWarm s =
         case String.toFloat s of
             Just x ->
@@ -652,7 +647,7 @@ should be retained.
         myTable |> filterRows "temperature" isWarm
 
 -}
-filterRows : String -> (Cell -> Bool) -> Table -> Table
+filterRows : String -> (String -> Bool) -> Table -> Table
 filterRows columnName fn tbl =
     let
         predicate n val =
@@ -841,6 +836,14 @@ outerJoin ( t1, heading1 ) ( t2, heading2 ) =
 
 
 -- ------------------------------- Private
+{- Type of data stored in the cells that make up a table. -}
+
+
+type alias Cell =
+    String
+
+
+
 {- The columns that make up a table of cells. -}
 
 
