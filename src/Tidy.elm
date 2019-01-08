@@ -1,21 +1,22 @@
 module Tidy exposing
     ( Table
     , Cell
-    , tableSummary
     , fromCSV
     , fromGridText
     , fromGridLists
-    , addRow
-    , addColumn
     , empty
+    , insertRow
+    , filterRows
+    , insertColumn
+    , removeColumn
+    , filterColumns
     , melt
     , transposeTable
     , leftJoin
     , rightJoin
     , innerJoin
     , outerJoin
-    , filterRows
-    , filterColumns
+    , tableSummary
     , numColumn
     , strColumn
     , boolColumn
@@ -24,25 +25,29 @@ module Tidy exposing
 
 {-| A collection of utilities for representing tabular data and reshaping them.
 
-
-## Table Representation
-
 @docs Table
 @docs Cell
-@docs tableSummary
 
 
-## Table Generation
+## Create
 
 @docs fromCSV
 @docs fromGridText
 @docs fromGridLists
-@docs addRow
-@docs addColumn
 @docs empty
 
 
-## Table Tidying
+## Edit
+
+@docs insertRow
+@docs filterRows
+
+@docs insertColumn
+@docs removeColumn
+@docs filterColumns
+
+
+## Tidy
 
 [Tidy data](https://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf)
 is a convention for organising tabular data such that columns represent _variables_
@@ -95,13 +100,12 @@ table2:
 @docs outerJoin
 
 
-## Table Filtering
+## Output
 
-@docs filterRows
-@docs filterColumns
+@docs tableSummary
 
 
-## Column conversion
+### Column output
 
 @docs numColumn
 @docs strColumn
@@ -131,7 +135,7 @@ type alias Cell =
 
 
 {-| Create an empty table. Useful if table items are to be added programatically
-with `addRow` and `addColumn`.
+with `insertRow` and `insertColumn`.
 -}
 empty : Table
 empty =
@@ -275,8 +279,8 @@ of the columns in the table to which each `columnValue` is added. Names not in t
 table to append are ignored and any unspecified columns have an empty string value
 inserted.
 -}
-addRow : List ( String, String ) -> Table -> Table
-addRow namedCells =
+insertRow : List ( String, String ) -> Table -> Table
+insertRow namedCells =
     -- To guarantee we don't misalign columns, we always add a complete set of
     -- column values, even if they are not all provided as parameters.
     let
@@ -297,8 +301,8 @@ with this name, it will get replaced with the given data. To ensure table rows a
 always aligned, if the table is not empty, the column values are padded / truncated
 to match the number of rows in the table.
 -}
-addColumn : String -> List String -> Table -> Table
-addColumn heading colValues tbl =
+insertColumn : String -> List String -> Table -> Table
+insertColumn heading colValues tbl =
     let
         numRows =
             if getColumns tbl == Dict.empty then
@@ -315,7 +319,17 @@ addColumn heading colValues tbl =
     in
     getColumns tbl
         |> Dict.insert ( numCols, String.trim heading ) (List.take numRows (colValues ++ extraRows))
+        -- Need to compact indices in case the additional column replaces existing one.
+        |> compactIndices
         |> toTable
+
+
+{-| Remove a column with the given name from a table. If the column is not present
+in the table, the original table is returned.
+-}
+removeColumn : String -> Table -> Table
+removeColumn colName =
+    getColumns >> remove colName >> compactIndices >> toTable
 
 
 {-| Extract the values of the column with the given name (first parameter) from a
@@ -410,6 +424,7 @@ tableSummary maxRows tbl =
             List.map (\s -> s ++ " |") >> (::) "|"
 
         headings =
+            --tbl |> getColumns |> Dict.keys |> List.map (\( n, s ) -> String.fromInt n ++ "," ++ s) |> addDividers
             tbl |> getColumns |> Dict.keys |> List.map Tuple.second |> addDividers
 
         divider =
@@ -483,7 +498,7 @@ transposeTable headingColumn rowName tbl =
         Just newHeadings ->
             let
                 body =
-                    removeColumn headingColumn (getColumns tbl)
+                    remove headingColumn (getColumns tbl)
 
                 trBody =
                     (rowName :: newHeadings)
@@ -497,7 +512,7 @@ transposeTable headingColumn rowName tbl =
                 (\cells t ->
                     case cells of
                         hd :: tl ->
-                            addColumn hd tl t
+                            insertColumn hd tl t
 
                         _ ->
                             t
@@ -616,8 +631,7 @@ melt columnName valueName colVars table =
                 row ->
                     extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
     in
-    -- TODO: Should we pass through an index compactor to  ensure column indices go from 0 to (numCols-1)?
-    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> toTable
+    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices |> toTable
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
@@ -675,7 +689,10 @@ depending on whether the column should be retained.
 -}
 filterColumns : (String -> Bool) -> Table -> Table
 filterColumns fn =
-    getColumns >> Dict.filter (\( _, colHeading ) _ -> fn colHeading) >> toTable
+    getColumns
+        >> Dict.filter (\( _, colHeading ) _ -> fn colHeading)
+        >> compactIndices
+        >> toTable
 
 
 {-| A _left join_ preserves all the values in the first table and adds any key-matched
@@ -897,9 +914,20 @@ getColumn colName columns =
 {- Like Dict.remove but ignores the ordering index in the key tuple. -}
 
 
-removeColumn : String -> Columns -> Columns
-removeColumn colName =
+remove : String -> Columns -> Columns
+remove colName =
     Dict.filter (\( _, s ) _ -> s /= colName)
+
+
+
+{- Re-compute column indices from 0 to (numCols-1) while preserving current order. -}
+
+
+compactIndices : Columns -> Columns
+compactIndices =
+    Dict.foldl
+        (\( _, colHeading ) v acc -> Dict.insert ( Dict.size acc, colHeading ) v acc)
+        Dict.empty
 
 
 columnsTail : Columns -> Columns

@@ -5306,34 +5306,6 @@ var author$project$Tidy$fromCSV = function () {
 								author$project$Tidy$toTable)))))));
 }();
 var author$project$WickhamExamples$messy1 = author$project$Tidy$fromCSV('Person,treatmenta,treatmentb\nJohn Smith, , 2\nJane Doe, 16, 11\nMary Johnson, 3, 1\n');
-var author$project$Tidy$addColumn = F3(
-	function (heading, colValues, tbl) {
-		var numRows = _Utils_eq(
-			author$project$Tidy$getColumns(tbl),
-			elm$core$Dict$empty) ? elm$core$List$length(colValues) : A3(
-			elm$core$List$foldl,
-			A2(elm$core$Basics$composeL, elm$core$Basics$max, elm$core$List$length),
-			0,
-			elm$core$Dict$values(
-				author$project$Tidy$getColumns(tbl)));
-		var numCols = elm$core$Dict$size(
-			author$project$Tidy$getColumns(tbl));
-		var extraRows = A2(
-			elm$core$List$repeat,
-			elm$core$List$length(colValues) - numRows,
-			'');
-		return author$project$Tidy$toTable(
-			A3(
-				elm$core$Dict$insert,
-				_Utils_Tuple2(
-					numCols,
-					elm$core$String$trim(heading)),
-				A2(
-					elm$core$List$take,
-					numRows,
-					_Utils_ap(colValues, extraRows)),
-				author$project$Tidy$getColumns(tbl)));
-	});
 var author$project$Tidy$empty = author$project$Tidy$toTable(elm$core$Dict$empty);
 var elm$core$Dict$foldl = F3(
 	function (func, acc, dict) {
@@ -5376,6 +5348,49 @@ var author$project$Tidy$getColumn = F2(
 			elm$core$Maybe$Nothing,
 			columns);
 	});
+var author$project$Tidy$compactIndices = A2(
+	elm$core$Dict$foldl,
+	F3(
+		function (_n0, v, acc) {
+			var colHeading = _n0.b;
+			return A3(
+				elm$core$Dict$insert,
+				_Utils_Tuple2(
+					elm$core$Dict$size(acc),
+					colHeading),
+				v,
+				acc);
+		}),
+	elm$core$Dict$empty);
+var author$project$Tidy$insertColumn = F3(
+	function (heading, colValues, tbl) {
+		var numRows = _Utils_eq(
+			author$project$Tidy$getColumns(tbl),
+			elm$core$Dict$empty) ? elm$core$List$length(colValues) : A3(
+			elm$core$List$foldl,
+			A2(elm$core$Basics$composeL, elm$core$Basics$max, elm$core$List$length),
+			0,
+			elm$core$Dict$values(
+				author$project$Tidy$getColumns(tbl)));
+		var numCols = elm$core$Dict$size(
+			author$project$Tidy$getColumns(tbl));
+		var extraRows = A2(
+			elm$core$List$repeat,
+			elm$core$List$length(colValues) - numRows,
+			'');
+		return author$project$Tidy$toTable(
+			author$project$Tidy$compactIndices(
+				A3(
+					elm$core$Dict$insert,
+					_Utils_Tuple2(
+						numCols,
+						elm$core$String$trim(heading)),
+					A2(
+						elm$core$List$take,
+						numRows,
+						_Utils_ap(colValues, extraRows)),
+					author$project$Tidy$getColumns(tbl))));
+	});
 var elm$core$Basics$neq = _Utils_notEqual;
 var elm$core$Dict$filter = F2(
 	function (isGood, dict) {
@@ -5388,7 +5403,7 @@ var elm$core$Dict$filter = F2(
 			elm$core$Dict$empty,
 			dict);
 	});
-var author$project$Tidy$removeColumn = function (colName) {
+var author$project$Tidy$remove = function (colName) {
 	return elm$core$Dict$filter(
 		F2(
 			function (_n0, _n1) {
@@ -5446,7 +5461,7 @@ var author$project$Tidy$transposeTable = F3(
 		if (!_n0.$) {
 			var newHeadings = _n0.a;
 			var body = A2(
-				author$project$Tidy$removeColumn,
+				author$project$Tidy$remove,
 				headingColumn,
 				author$project$Tidy$getColumns(tbl));
 			var trBody = author$project$Tidy$transpose(
@@ -5473,7 +5488,7 @@ var author$project$Tidy$transposeTable = F3(
 						if (cells.b) {
 							var hd = cells.a;
 							var tl = cells.b;
-							return A3(author$project$Tidy$addColumn, hd, tl, t);
+							return A3(author$project$Tidy$insertColumn, hd, tl, t);
 						} else {
 							return t;
 						}
@@ -5725,10 +5740,11 @@ var author$project$Tidy$melt = F4(
 			}
 		};
 		return author$project$Tidy$toTable(
-			extractRows(
-				_Utils_Tuple2(
-					author$project$Tidy$getColumns(table),
-					emptyColumns)).b);
+			author$project$Tidy$compactIndices(
+				extractRows(
+					_Utils_Tuple2(
+						author$project$Tidy$getColumns(table),
+						emptyColumns)).b));
 	});
 var author$project$WickhamExamples$tidy3 = A4(
 	author$project$Tidy$melt,
@@ -5770,7 +5786,7 @@ var author$project$Tidy$filterColumns = function (fn) {
 						var colHeading = _n0.b;
 						return fn(colHeading);
 					})),
-			author$project$Tidy$toTable));
+			A2(elm$core$Basics$composeR, author$project$Tidy$compactIndices, author$project$Tidy$toTable)));
 };
 var author$project$WickhamExamples$tidy8 = A2(
 	author$project$Tidy$filterColumns,
