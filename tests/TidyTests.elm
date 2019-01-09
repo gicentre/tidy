@@ -77,6 +77,18 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "colC" [ "", "c2", "", "c4" ]
                 |> Tidy.insertColumn "colD" [ "", "d2", "", "d4" ]
 
+        ldTableDiffKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key1" [ "k1", "k3" ]
+                |> Tidy.insertColumn "colA" [ "a1", "a3" ]
+                |> Tidy.insertColumn "colB" [ "b1", "b3" ]
+
+        ldTableSameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k1", "k3" ]
+                |> Tidy.insertColumn "colA" [ "a1", "a3" ]
+                |> Tidy.insertColumn "colB" [ "b1", "b3" ]
+
         rjTableDiffKey =
             Tidy.empty
                 |> Tidy.insertColumn "Key2" [ "k2", "k4", "k6", "k8" ]
@@ -93,6 +105,18 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "colD" [ "d2", "d4", "d6", "d8" ]
                 |> Tidy.insertColumn "colA" [ "a2", "a4", "", "" ]
                 |> Tidy.insertColumn "colB" [ "b2", "b4", "", "" ]
+
+        rdTableDiffKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key2" [ "k6", "k8" ]
+                |> Tidy.insertColumn "colC" [ "c6", "c8" ]
+                |> Tidy.insertColumn "colD" [ "d6", "d8" ]
+
+        rdTableSameKey =
+            Tidy.empty
+                |> Tidy.insertColumn "Key" [ "k6", "k8" ]
+                |> Tidy.insertColumn "colC" [ "c6", "c8" ]
+                |> Tidy.insertColumn "colD" [ "d6", "d8" ]
 
         ijTable =
             Tidy.empty
@@ -209,5 +233,37 @@ treatmentb, 2, 11, 1"""
             , test "outerJoinUnmatchedKey2" <|
                 \_ ->
                     Tidy.outerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
+            ]
+        , describe "diffTables"
+            [ test "leftDiffDiffKey" <|
+                \_ ->
+                    Tidy.leftDiff ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ldTableDiffKey
+            , test "leftDiffSameKey" <|
+                \_ ->
+                    Tidy.leftDiff ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ldTableSameKey
+            , test "rightDiffDiffKey" <|
+                \_ ->
+                    Tidy.rightDiff ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rdTableDiffKey
+            , test "rightDiffSameKey" <|
+                \_ ->
+                    Tidy.rightDiff ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal rdTableSameKey
+            , test "leftDiffUnmatchedKey1" <|
+                \_ ->
+                    Tidy.leftDiff ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal Tidy.empty
+            , test "leftDiffUnmatchedKey2" <|
+                \_ ->
+                    Tidy.leftDiff ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal jTable1SameKey
+            , test "leftDiffUnmatchedBothKeys" <|
+                \_ ->
+                    Tidy.leftDiff ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
+            , test "rightDiffUnmatchedKey1" <|
+                \_ ->
+                    Tidy.rightDiff ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal jTable2SameKey
+            , test "rightDiffUnmatchedKey2" <|
+                \_ ->
+                    Tidy.rightDiff ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
+            , test "rightDiffUnmatchedBothKeys" <|
+                \_ ->
+                    Tidy.rightDiff ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
             ]
         ]

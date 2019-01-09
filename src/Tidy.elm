@@ -16,6 +16,8 @@ module Tidy exposing
     , rightJoin
     , innerJoin
     , outerJoin
+    , leftDiff
+    , rightDiff
     , tableSummary
     , numColumn
     , strColumn
@@ -98,6 +100,8 @@ table2:
 @docs rightJoin
 @docs innerJoin
 @docs outerJoin
+@docs leftDiff
+@docs rightDiff
 
 
 # Output
@@ -867,6 +871,60 @@ outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
         in
         Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
             |> toTable
+
+
+{-| Provides table of all the rows in the first table that do not occur in any key-matched
+rows in the second table.
+
+    leftDiff ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key1 | colA | colB |
+| ---- | ---- | ---- |
+| k1   | a1   | b1   |
+| k3   | a3   | b3   |
+```
+
+If the first key is not found, an empty table is returned, if the second key is
+not found, the first table is returned.
+
+-}
+leftDiff : ( Table, String ) -> ( Table, String ) -> Table
+leftDiff ( t1, key1 ) ( t2, key2 ) =
+    if not <| memberColumns key1 (getColumns t1) then
+        empty
+
+    else
+        let
+            t2Keys =
+                getColumn key2 (getColumns t2) |> Maybe.withDefault []
+        in
+        filterRows key1 (\s -> not <| List.member s t2Keys) t1
+
+
+{-| Provides table of all the rows in the second table that do not occur in any key-matched
+rows in the first table.
+
+    rightDiff ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key2 | colA | colB |
+| ---- | ---- | ---- |
+| k6   | c6   | d6   |
+| k8   | c8   | d8   |
+```
+
+If the first key is not found, the second table is returned, if the second key is
+not found, an empty table is returned.
+
+-}
+rightDiff : ( Table, String ) -> ( Table, String ) -> Table
+rightDiff =
+    flip leftDiff
 
 
 
