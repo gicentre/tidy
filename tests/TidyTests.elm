@@ -142,7 +142,7 @@ treatmentb, 2, 11, 1"""
                 \_ ->
                     table4 |> Expect.equal (Tidy.transposeTable "Treatment" "Person" table2)
             ]
-        , describe "joining"
+        , describe "leftJoins"
             [ test "leftJoinDiffKey" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ljTableDiffKey
@@ -152,7 +152,15 @@ treatmentb, 2, 11, 1"""
             , test "leftJoinReflexive" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
-            , test "rightJoinDiffKey" <|
+            , test "leftJoinUnmatchedKey1" <|
+                \_ ->
+                    Tidy.leftJoin ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal jTable1SameKey
+            , test "leftJoinUnmatchedKey2" <|
+                \_ ->
+                    Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal jTable1SameKey
+            ]
+        , describe "rightjoins"
+            [ test "rightJoinDiffKey" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rjTableDiffKey
             , test "rightJoinSameKey" <|
@@ -161,7 +169,15 @@ treatmentb, 2, 11, 1"""
             , test "rightJoinReflexive" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable1DiffKey, "Key1" ) |> Expect.equal jTable1DiffKey
-            , test "innerJoinDiffKey" <|
+            , test "rightJoinUnmatchedKey1" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal jTable2SameKey
+            , test "rightJoinUnmatchedKey2" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal jTable2SameKey
+            ]
+        , describe "innerjoins"
+            [ test "innerJoinDiffKey" <|
                 \_ ->
                     Tidy.innerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ijTable
             , test "innerJoinSameKey" <|
@@ -170,7 +186,15 @@ treatmentb, 2, 11, 1"""
             , test "innerJoinReflexive" <|
                 \_ ->
                     Tidy.innerJoin "Key" ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
-            , test "outerJoinDiffKey" <|
+            , test "innerJoinUnmatchedKey1" <|
+                \_ ->
+                    Tidy.innerJoin "NewKey" ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal Tidy.empty
+            , test "innerJoinUnmatchedKey2" <|
+                \_ ->
+                    Tidy.innerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
+            ]
+        , describe "outerjoins"
+            [ test "outerJoinDiffKey" <|
                 \_ ->
                     Tidy.outerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ojTable
             , test "outerJoinSameKey" <|
@@ -179,5 +203,11 @@ treatmentb, 2, 11, 1"""
             , test "outerJoinReflexive" <|
                 \_ ->
                     Tidy.outerJoin "Key" ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
+            , test "outerJoinUnmatchedKey1" <|
+                \_ ->
+                    Tidy.outerJoin "NewKey" ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Key" ) |> Expect.equal Tidy.empty
+            , test "outerJoinUnmatchedKey2" <|
+                \_ ->
+                    Tidy.outerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
             ]
         ]

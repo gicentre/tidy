@@ -713,32 +713,39 @@ would generate
 | k4   | a4   | b4   | k4  | c4   | d4   |
 ```
 
+If one or both of the key columns are not found, the left table is returned.
+
 -}
 leftJoin : ( Table, String ) -> ( Table, String ) -> Table
-leftJoin ( t1, heading1 ) ( t2, heading2 ) =
-    let
-        keyCol colLabel =
-            case ( getColumn heading2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
-                ( Just ks, Just vs ) ->
-                    Dict.fromList (List.map2 Tuple.pair ks vs)
+leftJoin ( t1, key1 ) ( t2, key2 ) =
+    -- Check that the named keys are present in both tables
+    if not <| memberColumns key1 (getColumns t1) && memberColumns key2 (getColumns t2) then
+        t1
 
-                _ ->
-                    Dict.empty
+    else
+        let
+            keyCol colLabel =
+                case ( getColumn key2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
+                    ( Just ks, Just vs ) ->
+                        Dict.fromList (List.map2 Tuple.pair ks vs)
 
-        tableCol colLabel =
-            List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
-                (getColumn heading1 (getColumns t1) |> Maybe.withDefault [])
+                    _ ->
+                        Dict.empty
 
-        leftInsert ( n, label2 ) columns =
-            if memberColumns label2 columns then
-                columns
+            tableCol colLabel =
+                List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
+                    (getColumn key1 (getColumns t1) |> Maybe.withDefault [])
 
-            else
-                columns |> Dict.insert ( n, label2 ) (tableCol label2)
-    in
-    List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1))))
-        |> compactIndices 0
-        |> toTable
+            leftInsert ( n, label2 ) columns =
+                if memberColumns label2 columns then
+                    columns
+
+                else
+                    columns |> Dict.insert ( n, label2 ) (tableCol label2)
+        in
+        List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1))))
+            |> compactIndices 0
+            |> toTable
 
 
 {-| A _right join_ preserves all the values in the second table and adds any
@@ -758,6 +765,8 @@ would generate
 | k6   | c6   | d6   |      |      |      |
 | k8   | c8   | d8   |      |      |      |
 ```
+
+If one or both of the key columns are not found, the right table is returned.
 
 -}
 rightJoin : ( Table, String ) -> ( Table, String ) -> Table
@@ -781,24 +790,31 @@ would generate
 | k4  | a4   | b4   | c4   | d4   |
 ```
 
+If one or both of the key columns are not found, this produces an empty table.
+
 -}
 innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
 innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
-    let
-        t1 =
-            oldT1 |> renameColumn key1 keyName
+    -- Check that the named keys are present in both tables
+    if not <| memberColumns key1 (getColumns oldT1) && memberColumns key2 (getColumns oldT2) then
+        empty
 
-        t2 =
-            oldT2 |> renameColumn key2 keyName
+    else
+        let
+            t1 =
+                oldT1 |> renameColumn key1 keyName
 
-        lJoin =
-            leftJoin ( t1, keyName ) ( t2, keyName )
+            t2 =
+                oldT2 |> renameColumn key2 keyName
 
-        t2Keys =
-            getColumn keyName (getColumns t2) |> Maybe.withDefault []
-    in
-    leftJoin ( t1, keyName ) ( t2, keyName )
-        |> filterRows keyName (\s -> List.member s t2Keys)
+            lJoin =
+                leftJoin ( t1, keyName ) ( t2, keyName )
+
+            t2Keys =
+                getColumn keyName (getColumns t2) |> Maybe.withDefault []
+        in
+        leftJoin ( t1, keyName ) ( t2, keyName )
+            |> filterRows keyName (\s -> List.member s t2Keys)
 
 
 {-| An _outer join_ contains all rows of both joined tables. The first parameter
@@ -820,30 +836,37 @@ would generate
 | k8  |      |      | c8   | d8   |
 ```
 
+If one or both of the key columns are not found, this produces an empty table.
+
 -}
 outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
 outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
     -- TODO: What to do when tables have some common column names?
-    let
-        t1 =
-            oldT1 |> renameColumn key1 keyName
+    -- Check that the named keys are present in both tables
+    if not <| memberColumns key1 (getColumns oldT1) && memberColumns key2 (getColumns oldT2) then
+        empty
 
-        t2 =
-            oldT2 |> renameColumn key2 keyName
+    else
+        let
+            t1 =
+                oldT1 |> renameColumn key1 keyName
 
-        leftColumns =
-            leftJoin ( t1, keyName ) ( t2, keyName ) |> getColumns
+            t2 =
+                oldT2 |> renameColumn key2 keyName
 
-        rightTable =
-            rightJoin ( t1, keyName ) ( t2, keyName )
+            leftColumns =
+                leftJoin ( t1, keyName ) ( t2, keyName ) |> getColumns
 
-        diff =
-            filterRows keyName
-                (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
-                rightTable
-    in
-    Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
-        |> toTable
+            rightTable =
+                rightJoin ( t1, keyName ) ( t2, keyName )
+
+            diff =
+                filterRows keyName
+                    (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
+                    rightTable
+        in
+        Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
+            |> toTable
 
 
 
@@ -944,7 +967,7 @@ remove colName =
 
 {-| Private version of insertColumn that allows a column index to be defined.
 Normally new columns are inserted at the end of existing ones (by inserting at
-Dict.size, but if we need to insert before others, we can provide a negative
+Dict.size) but if we need to insert before others, we can provide a negative
 index for example.
 -}
 insertColumnAt : Int -> String -> List String -> Columns -> Columns
