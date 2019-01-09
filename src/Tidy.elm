@@ -828,9 +828,11 @@ innerJoin keyName ( oldT1, oldKey1 ) ( oldT2, oldKey2 ) =
         |> toTable
 
 
-{-| An _outer join_ contains all rows of both joined tables.
+{-| An _outer join_ contains all rows of both joined tables. The first parameter
+is the name to give the new key-matched column, replacing the separate key names
+in the two tables.
 
-    outerJoin ( table1, "Key1" ) ( table2, "Key2" )
+    outerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
 
 would generate
 
@@ -846,22 +848,34 @@ would generate
 ```
 
 -}
-outerJoin : ( Table, String ) -> ( Table, String ) -> Table
-outerJoin ( t1, heading1 ) ( t2, heading2 ) =
-    -- TODO: Account for different key names in the two tables. Include descriptions in comments for what happens if both keys share a common name and if they do not.
+outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
+outerJoin keyName ( oldT1, oldKey1 ) ( oldT2, oldKey2 ) =
+    -- TODO: What to do when tables have some common column names?
     let
+        t1 =
+            oldT1 |> renameColumn oldKey1 keyName
+
+        key1 =
+            keyName
+
+        t2 =
+            oldT2 |> renameColumn oldKey2 keyName
+
+        key2 =
+            keyName
+
         leftColumns =
-            leftJoin ( t1, heading1 ) ( t2, heading2 ) |> getColumns
+            leftJoin ( t1, key1 ) ( t2, key2 ) |> getColumns
 
         rightTable =
-            rightJoin ( t1, heading1 ) ( t2, heading2 )
+            rightJoin ( t1, key1 ) ( t2, key2 )
 
         diff =
-            filterRows heading2
-                (\s -> Basics.not (List.member s (getColumn heading1 leftColumns |> Maybe.withDefault [])))
+            filterRows key2
+                (\s -> Basics.not (List.member s (getColumn key1 leftColumns |> Maybe.withDefault [])))
                 rightTable
     in
-    Dict.map (\k v -> v ++ (Dict.get k (getColumns diff) |> Maybe.withDefault [])) leftColumns
+    Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
         |> toTable
 
 

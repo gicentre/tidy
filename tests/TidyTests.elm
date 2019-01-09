@@ -104,6 +104,11 @@ treatmentb, 2, 11, 1"""
 
         ojTable =
             Tidy.empty
+                |> Tidy.insertColumn "NewKey" [ "k1", "k2", "k3", "k4", "k6", "k8" ]
+                |> Tidy.insertColumn "colA" [ "a1", "a2", "a3", "a4", "", "" ]
+                |> Tidy.insertColumn "colB" [ "b1", "b2", "b3", "b4", "", "" ]
+                |> Tidy.insertColumn "colC" [ "", "c2", "", "c4", "c6", "c8" ]
+                |> Tidy.insertColumn "colD" [ "", "d2", "", "d4", "d6", "d8" ]
     in
     describe "Table generation and column output conversion"
         [ describe "fromCSV"
@@ -150,10 +155,10 @@ treatmentb, 2, 11, 1"""
             , test "rightJoinSameKey" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal rjTableSameKey
-            , test "reflexiveLeftJoin" <|
+            , test "leftJoinReflexive" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
-            , test "reflexiveRightJoin" <|
+            , test "rightJoinReflexive" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable1DiffKey, "Key1" ) |> Expect.equal jTable1DiffKey
             , test "innerJoinDiffKey" <|
@@ -162,5 +167,14 @@ treatmentb, 2, 11, 1"""
             , test "innerJoinSameKey" <|
                 \_ ->
                     Tidy.innerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ijTable
+            , test "outerJoinDiffKey" <|
+                \_ ->
+                    Tidy.outerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ojTable
+            , test "outerJoinSameKey" <|
+                \_ ->
+                    Tidy.outerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ojTable
+            , test "outerJoinReflexive" <|
+                \_ ->
+                    Tidy.outerJoin "Key" ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
             ]
         ]
