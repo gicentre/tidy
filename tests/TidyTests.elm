@@ -8,7 +8,7 @@ import Tidy
 suite : Test
 suite =
     let
-        table1 =
+        table1CSV =
             """Treatment,John Smith,Jane Doe,Mary Johnson
 treatmenta,  , 16, 3
 treatmentb, 2, 11, 1"""
@@ -114,50 +114,50 @@ treatmentb, 2, 11, 1"""
         [ describe "fromCSV"
             [ test "CSV treatment column" <|
                 \_ ->
-                    Tidy.strColumn "Treatment" table1 |> Expect.equal [ "treatmenta", "treatmentb" ]
+                    Tidy.strColumn "Treatment" table1CSV |> Expect.equal [ "treatmenta", "treatmentb" ]
             , test "CSV column with all items" <|
                 \_ ->
-                    Tidy.strColumn "Jane Doe" table1 |> Expect.equal [ "16", "11" ]
+                    Tidy.strColumn "Jane Doe" table1CSV |> Expect.equal [ "16", "11" ]
             , test "CSV column with missing items" <|
                 \_ ->
-                    Tidy.strColumn "John Smith" table1 |> Expect.equal [ "", "2" ]
+                    Tidy.strColumn "John Smith" table1CSV |> Expect.equal [ "", "2" ]
             , test "CSV numeric output of column with all items" <|
                 \_ ->
-                    Tidy.numColumn "Jane Doe" table1 |> Expect.equal [ 16, 11 ]
+                    Tidy.numColumn "Jane Doe" table1CSV |> Expect.equal [ 16, 11 ]
             , test "CSV numeric column with missing items" <|
                 \_ ->
-                    Tidy.numColumn "John Smith" table1 |> Expect.equal [ 0, 2 ]
+                    Tidy.numColumn "John Smith" table1CSV |> Expect.equal [ 0, 2 ]
             , test "CSV numeric conversion of non-numeric column" <|
                 \_ ->
-                    Tidy.numColumn "Treatment" table1 |> Expect.equal [ 0, 0 ]
+                    Tidy.numColumn "Treatment" table1CSV |> Expect.equal [ 0, 0 ]
             ]
         , describe "programaticTables"
             [ test "addingColumns" <|
                 \_ ->
-                    table1 |> Expect.equal table2
+                    table1CSV |> Expect.equal table2
             , test "addingRows" <|
                 \_ ->
-                    table1 |> Expect.equal table3
+                    table1CSV |> Expect.equal table3
             , test "transposing" <|
                 \_ ->
-                    table4 |> Expect.equal (Tidy.transposeTable "Treatment" "Person" table1)
+                    table4 |> Expect.equal (Tidy.transposeTable "Treatment" "Person" table2)
             ]
         , describe "joining"
             [ test "leftJoinDiffKey" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ljTableDiffKey
-            , test "rightJoinDiffKey" <|
-                \_ ->
-                    Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rjTableDiffKey
             , test "leftJoinSameKey" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ljTableSameKey
-            , test "rightJoinSameKey" <|
-                \_ ->
-                    Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal rjTableSameKey
             , test "leftJoinReflexive" <|
                 \_ ->
                     Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
+            , test "rightJoinDiffKey" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rjTableDiffKey
+            , test "rightJoinSameKey" <|
+                \_ ->
+                    Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal rjTableSameKey
             , test "rightJoinReflexive" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable1DiffKey, "Key1" ) |> Expect.equal jTable1DiffKey
@@ -167,6 +167,9 @@ treatmentb, 2, 11, 1"""
             , test "innerJoinSameKey" <|
                 \_ ->
                     Tidy.innerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Key" ) |> Expect.equal ijTable
+            , test "innerJoinReflexive" <|
+                \_ ->
+                    Tidy.innerJoin "Key" ( jTable1SameKey, "Key" ) ( jTable1SameKey, "Key" ) |> Expect.equal jTable1SameKey
             , test "outerJoinDiffKey" <|
                 \_ ->
                     Tidy.outerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ojTable

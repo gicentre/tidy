@@ -783,49 +783,22 @@ would generate
 
 -}
 innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
-innerJoin keyName ( oldT1, oldKey1 ) ( oldT2, oldKey2 ) =
+innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
     let
-        -- Rename the two table keys to guarantee they do not clash any other key names
-        key1 =
-            keyName ++ oldKey1 ++ "1"
-
-        key2 =
-            keyName ++ oldKey2 ++ "2"
-
         t1 =
-            oldT1 |> renameColumn oldKey1 key1
+            oldT1 |> renameColumn key1 keyName
 
         t2 =
-            oldT2 |> renameColumn oldKey2 key2
+            oldT2 |> renameColumn key2 keyName
 
-        keyCol ( _, colLabel ) =
-            case ( getColumn key2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
-                ( Just ks, Just vs ) ->
-                    Dict.fromList (List.map2 Tuple.pair ks vs)
+        lJoin =
+            leftJoin ( t1, keyName ) ( t2, keyName )
 
-                _ ->
-                    Dict.empty
-
-        tableCol colLabel =
-            List.map (\k -> Dict.get k (keyCol colLabel) |> Maybe.withDefault "")
-                (getColumn key1 (getColumns t1) |> Maybe.withDefault [])
-
-        newTable =
-            -- Setting the indices of t2 to at least 99999 ensures columns are to the right of t1
-            List.foldl (\label2 -> Dict.insert label2 (tableCol label2)) (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices 99999))
-                |> toTable
-                |> filterRows key2 (not << String.isEmpty)
-
-        newKeyColumn =
-            strColumn key1 newTable
+        t2Keys =
+            getColumn keyName (getColumns t2) |> Maybe.withDefault []
     in
-    newTable
-        |> removeColumn key1
-        |> removeColumn key2
-        |> getColumns
-        |> insertColumnAt -1 keyName newKeyColumn
-        |> compactIndices 0
-        |> toTable
+    leftJoin ( t1, keyName ) ( t2, keyName )
+        |> filterRows keyName (\s -> List.member s t2Keys)
 
 
 {-| An _outer join_ contains all rows of both joined tables. The first parameter
@@ -849,30 +822,24 @@ would generate
 
 -}
 outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
-outerJoin keyName ( oldT1, oldKey1 ) ( oldT2, oldKey2 ) =
+outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
     -- TODO: What to do when tables have some common column names?
     let
         t1 =
-            oldT1 |> renameColumn oldKey1 keyName
-
-        key1 =
-            keyName
+            oldT1 |> renameColumn key1 keyName
 
         t2 =
-            oldT2 |> renameColumn oldKey2 keyName
-
-        key2 =
-            keyName
+            oldT2 |> renameColumn key2 keyName
 
         leftColumns =
-            leftJoin ( t1, key1 ) ( t2, key2 ) |> getColumns
+            leftJoin ( t1, keyName ) ( t2, keyName ) |> getColumns
 
         rightTable =
-            rightJoin ( t1, key1 ) ( t2, key2 )
+            rightJoin ( t1, keyName ) ( t2, keyName )
 
         diff =
-            filterRows key2
-                (\s -> Basics.not (List.member s (getColumn key1 leftColumns |> Maybe.withDefault [])))
+            filterRows keyName
+                (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
                 rightTable
     in
     Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
