@@ -118,8 +118,10 @@ table2:
 
 -}
 
+--import Parser exposing ((|.), (|=), Parser)
+
+import CSVParser
 import Dict exposing (Dict)
-import Regex
 
 
 {-| A table of data arranged in rows and columns. Each column in a table has a
@@ -155,14 +157,6 @@ empty =
 fromCSV : String -> Table
 fromCSV =
     let
-        submatches : String -> String -> List String
-        submatches regex =
-            Regex.find
-                (Regex.fromString regex |> Maybe.withDefault Regex.never)
-                >> List.concatMap .submatches
-                >> List.filterMap identity
-
-        addEntry : ( Int, List Cell ) -> Columns -> Columns
         addEntry xs =
             case xs of
                 ( n, hd :: tl ) ->
@@ -171,14 +165,7 @@ fromCSV =
                 _ ->
                     identity
     in
-    -- regex modified from https://stackoverflow.com/a/42535295 to account for
-    -- whitespace between commas adjacent to quoted entries.
-    -- For Elm parser approach consider
-    -- https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38
-    String.lines
-        >> List.filter (not << String.isEmpty)
-        >> List.map (\s -> " " ++ s ++ " ")
-        >> List.map (submatches "(?:,\\s*\"|^\")(\"\"|[\\w\\W]*?)(?=\"\\s*,|\"$)|(?:,(?!\")|^(?!\"))([^,]*?)(?=$|,)")
+    CSVParser.parse
         >> transpose
         >> List.indexedMap Tuple.pair
         >> List.foldl addEntry Dict.empty

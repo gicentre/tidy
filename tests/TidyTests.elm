@@ -14,6 +14,21 @@ treatmenta,  , 16, 3
 treatmentb, 2, 11, 1"""
                 |> Tidy.fromCSV
 
+        complexCSV =
+            """Name,Value
+            James,1
+"James Bond",2
+
+
+"Bond, James Bond",007
+Miss Moneypenny,3,,,,,,
+Spectre      ,    4   """
+
+        complexCSVTable =
+            Tidy.empty
+                |> Tidy.insertColumn "Name" [ "James", "James Bond", "Bond, James Bond", "Miss Moneypenny", "Spectre" ]
+                |> Tidy.insertColumn "Value" [ "1", "2", "007", "3", "4" ]
+
         table2 =
             Tidy.empty
                 |> Tidy.insertColumn "Treatment" [ "treatmenta", "treatmentb" ]
@@ -154,6 +169,9 @@ treatmentb, 2, 11, 1"""
             , test "CSV numeric conversion of non-numeric column" <|
                 \_ ->
                     Tidy.numColumn "Treatment" table1CSV |> Expect.equal [ 0, 0 ]
+            , test "Unruly CSV" <|
+                \_ ->
+                    Tidy.fromCSV complexCSV |> Expect.equal complexCSVTable
             ]
         , describe "programaticTables"
             [ test "addingColumns" <|
