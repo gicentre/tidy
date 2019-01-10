@@ -29,6 +29,49 @@ Spectre      ,    4   """
                 |> Tidy.insertColumn "Name" [ "James", "James Bond", "Bond, James Bond", "Miss Moneypenny", "Spectre" ]
                 |> Tidy.insertColumn "Value" [ "1", "2", "007", "3", "4" ]
 
+        gridTextTable =
+            """z00,z01,z02,z03
+z10,z11,z12,z13
+z20,z21,z22,z23""" |> Tidy.fromGrid
+
+        gridTextRaggedTable =
+            """  z00,z01,z02,z03
+
+z10,z11,z12,z13,extra
+
+z20,    z21, z22, z23
+   ,
+"""
+                |> Tidy.fromGrid
+
+        gridRowsTable =
+            [ [ "z00", "z01", "z02", "z03" ]
+            , [ "z10", "z11", "z12", "z13" ]
+            , [ "z20", "z21", "z22", "z23" ]
+            ]
+                |> Tidy.fromGridRows
+
+        gridRowsRaggedTable =
+            [ [ "z00", "z01", "z02", "z03" ]
+            , []
+            , [ "z10", "z11", "z12", "z13", "extra" ]
+            , [ "z20", "z21", "z22", "z23" ]
+            , [ "", "" ]
+            ]
+                |> Tidy.fromGridRows
+
+        gridTable =
+            Tidy.empty
+                |> Tidy.insertColumn "row" [ "0", "0", "0", "0", "1", "1", "1", "1", "2", "2", "2", "2" ]
+                |> Tidy.insertColumn "col" [ "0", "1", "2", "3", "0", "1", "2", "3", "0", "1", "2", "3" ]
+                |> Tidy.insertColumn "z" [ "z00", "z01", "z02", "z03", "z10", "z11", "z12", "z13", "z20", "z21", "z22", "z23" ]
+
+        gridTableRagged =
+            Tidy.empty
+                |> Tidy.insertColumn "row" [ "0", "0", "0", "0", "1", "1", "1", "1", "1", "2", "2", "2", "2", "3", "3" ]
+                |> Tidy.insertColumn "col" [ "0", "1", "2", "3", "0", "1", "2", "3", "4", "0", "1", "2", "3", "0", "1" ]
+                |> Tidy.insertColumn "z" [ "z00", "z01", "z02", "z03", "z10", "z11", "z12", "z13", "extra", "z20", "z21", "z22", "z23", "", "" ]
+
         table2 =
             Tidy.empty
                 |> Tidy.insertColumn "Treatment" [ "treatmenta", "treatmentb" ]
@@ -172,6 +215,20 @@ Spectre      ,    4   """
             , test "Unruly CSV" <|
                 \_ ->
                     Tidy.fromCSV complexCSV |> Expect.equal complexCSVTable
+            ]
+        , describe "fromGrid"
+            [ test "gridText" <|
+                \_ ->
+                    gridTextTable |> Expect.equal gridTable
+            , test "gridRows" <|
+                \_ ->
+                    gridRowsTable |> Expect.equal gridTable
+            , test "gridTextRagged" <|
+                \_ ->
+                    gridTextRaggedTable |> Expect.equal gridTableRagged
+            , test "gridRowsRagged" <|
+                \_ ->
+                    gridRowsRaggedTable |> Expect.equal gridTableRagged
             ]
         , describe "programaticTables"
             [ test "addingColumns" <|

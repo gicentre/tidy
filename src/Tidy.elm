@@ -1,8 +1,8 @@
 module Tidy exposing
     ( Table
     , fromCSV
-    , fromGridText
-    , fromGridLists
+    , fromGrid
+    , fromGridRows
     , empty
     , insertRow
     , filterRows
@@ -33,8 +33,8 @@ module Tidy exposing
 # Create
 
 @docs fromCSV
-@docs fromGridText
-@docs fromGridLists
+@docs fromGrid
+@docs fromGridRows
 @docs empty
 
 
@@ -73,8 +73,8 @@ Messy data can be tidied with a small number of simple operations.
 # Join
 
 Join two tables using a common key. While not specific to tidy data, joining tidy
-tables is often more meaningful than joining messy ones. The examples below illustrate
-joining two input tables as follows with shared key values `k2` and `k4`:
+tables is often more meaningful than joining messy ones. The examples below
+illustrate joining two input tables with shared key values `k2` and `k4`:
 
 ```markdown
 table1:
@@ -124,7 +124,7 @@ import CSVParser
 import Dict exposing (Dict)
 
 
-{-| A table of data arranged in rows and columns. Each column in a table has a
+{-| The basic organisational unit for tabular data. Each column in a table has a
 unique name by which it may be referenced. Table cell values are represented as
 Strings, but can be converted to other types via column output functions
 (e.g. [numColumn](#numColumn)).
@@ -132,9 +132,7 @@ Strings, but can be converted to other types via column output functions
 type
     Table
     -- Opaque type
-    = Table
-        { columns : Columns
-        }
+    = Table { columns : Columns }
 
 
 {-| Create an empty table. Useful if table items are to be added programatically
@@ -195,18 +193,23 @@ into a tidy table in the form:
 |   : |   : |   : |
 ```
 
-Note the common convention that in grids, the origin (row 0) is at the top-left
-whereas in Cartesian coordinate systems the origin (y = 0) is at the bottom-left.
-You may therefore wish to perform an additional transformation on the ordering of
-row values in the input string if you are mapping onto a Cartesian coordinate system.
+Values between commas are outer-trimmed of whitespace unless enclosed in quotes
+and entirely blank lines are ignored. Input can be ragged with different numbers
+of columns in each row.
+
+Note the common convention that in grids, the origin (row 0, col 0) is at the top-left,
+whereas in Cartesian coordinate systems the origin (x=0, y=0) is at the bottom-left.
+You may therefore wish to reverse the order of row values in the input string if
+you are mapping onto a Cartesian coordinate system.
 
 -}
-fromGridText : String -> Table
-fromGridText =
+fromGrid : String -> Table
+fromGrid =
     String.lines
         >> List.filter (not << String.isEmpty)
-        >> List.map (String.split "," >> List.filter (not << String.isEmpty))
-        >> fromGridLists
+        >> List.map (String.split ",")
+        -->> List.filter (not << String.isEmpty))
+        >> fromGridRows
 
 
 {-| Transform list of input string lists in the form:
@@ -232,14 +235,15 @@ into a tidy table in the form:
 |   : |   : |   : |
 ```
 
-Note the common convention that in grids, the origin (row 0) is at the top-left
-whereas in Cartesian coordinate systems the origin (y = 0) is at the bottom-left.
-You may therefore wish to perform an additional reversing of the order of row
-lists in the input if you are mapping onto a Cartesian coordinate system.
+Input can be ragged with different numbers of columns in each row. Entirely empty
+rows (i.e. `[]`) are ignored, but cells with empty strings (e.g. `[""]`) are captured.
+
+As with [fromGrid](#fromGrid), you may wish to reverse the input row order if you
+are mapping onto a Cartesian coordinate system.
 
 -}
-fromGridLists : List (List String) -> Table
-fromGridLists =
+fromGridRows : List (List String) -> Table
+fromGridRows =
     let
         updateCol v maybeCol =
             case maybeCol of
@@ -247,15 +251,16 @@ fromGridLists =
                     Just [ v ]
 
                 Just col ->
-                    Just (v :: col)
+                    Just (col ++ [ v ])
 
         addGridCell ( r, c, z ) =
             Dict.update ( 0, "row" ) (updateCol r)
                 >> Dict.update ( 1, "col" ) (updateCol c)
                 >> Dict.update ( 2, "z" ) (updateCol z)
     in
-    List.indexedMap
-        (\r -> List.indexedMap (\c z -> ( String.fromInt r, String.fromInt c, String.trim z )))
+    List.filter (not << List.isEmpty)
+        >> List.indexedMap
+            (\r -> List.indexedMap (\c z -> ( String.fromInt r, String.fromInt c, String.trim z )))
         >> List.concat
         >> List.foldl addGridCell Dict.empty
         >> toTable
@@ -264,8 +269,8 @@ fromGridLists =
 {-| Add a row of values to a table. The new values are represented by a list of
 `(columnName,columnValue)` tuples. The columnNames should correspond to the names
 of the columns in the table to which each `columnValue` is added. Names not in the
-table to append are ignored and any unspecified columns have an empty string value
-inserted.
+table to append are ignored and any unspecified columns will have an empty string
+value inserted.
 -}
 insertRow : List ( String, String ) -> Table -> Table
 insertRow namedCells =
@@ -284,7 +289,7 @@ insertRow namedCells =
 
 
 {-| Rename the given column (first parameter) with a new name (second parameter).
-If the new column name matches an exsiting one, the existing one will be replaced
+If the new column name matches an existing one, the existing one will be replaced
 by the renamed column.
 -}
 renameColumn : String -> String -> Table -> Table
@@ -371,7 +376,7 @@ strColumn heading =
 
 
 {-| Extract Boolean values of a given column from a table. Assumes that `True`
-values can be represented by the case-insenstive strings `true`, `yes` and `1`
+values can be represented by the case-insensitive strings `true`, `yes` and `1`
 while all other values are assumed to be false.
 
       myTable |> toBool "isMarried"
@@ -448,9 +453,9 @@ tableSummary maxRows tbl =
         |> List.concat
 
 
-{-| Transpose the rows and columns of a table. To do this you need to provide the
-name of column that will generate the column headings in the transposed table
-(first parameter) and the name you wish to give the new row names (second parameter).
+{-| Transpose the rows and columns of a table. Provide the name of column that will
+generate the column headings in the transposed table as the first parameter and the
+name you wish to give the new row names as the second.
 
 For example,
 
@@ -538,13 +543,13 @@ can be melted to create a tidy table:
 | Sheffield | 2017 | 11          |
 | Sheffield | 2018 | 13          |
 | Glasgow   | 2017 |  8          |
-| Glasgow   | 2017 |  9          |
+| Glasgow   | 2018 |  9          |
 ```
 
 The first two parameters represent the heading names to be given to the column
 reference (`year` in the example above) and variable column (`temperature` in the
 example above) to be generated. The third is a list of the (columnName,columnReference)
-to be melted (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2017") ]`
+to be melted (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2018") ]`
 above) and the final, the table to convert. For example
 
     """location,temperature2017,temperature2018
@@ -676,7 +681,8 @@ filterRows columnName fn tbl =
 be a function that takes a column heading and returns either `True` or `False`
 depending on whether the column should be retained.
 
-    myTable |> filterColumns ((==) "temperature2017")
+    myTable
+        |> filterColumns (\s -> String.left 11 s == "temperature")
 
 -}
 filterColumns : (String -> Bool) -> Table -> Table
@@ -697,11 +703,11 @@ would generate
 
 ```markdown
 | Key1 | colA | colB | Key2 | colC | colD |
-| ---- | ---- | ---- | --- | ---- | ---- |
-| k1   | a1   | b1   |     |      |      |
-| k2   | a2   | b2   | k2  | c2   | d2   |
-| k3   | a3   | b3   |     |      |      |
-| k4   | a4   | b4   | k4  | c4   | d4   |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| k1   | a1   | b1   |      |      |      |
+| k2   | a2   | b2   | k2   | c2   | d2   |
+| k3   | a3   | b3   |      |      |      |
+| k4   | a4   | b4   | k4   | c4   | d4   |
 ```
 
 If one or both of the key columns are not found, the left table is returned.
@@ -765,10 +771,10 @@ rightJoin =
     flip leftJoin
 
 
-{-| An 'inner join' will contain only key-matched rows that are present in both tables.
-The first parameter is the name to give the new key-matched column, replacing the
-separate key names in the two tables. Where both tables share a common column name,
-only one is stored in the output.
+{-| An _inner join_ will contain only key-matched rows that are present in both
+tables. The first parameter is the name to give the new key-matched column,
+replacing the separate key names in the two tables. Where both tables share a
+common column name, the one in the first table is prioritised.
 
     innerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
 
@@ -860,8 +866,8 @@ outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
             |> toTable
 
 
-{-| Provides table of all the rows in the first table that do not occur in any key-matched
-rows in the second table.
+{-| Provides a table of all the rows in the first table that do not occur in any
+key-matched rows in the second table.
 
     leftDiff ( table1, "Key1" ) ( table2, "Key2" )
 
@@ -891,8 +897,8 @@ leftDiff ( t1, key1 ) ( t2, key2 ) =
         filterRows key1 (\s -> not <| List.member s t2Keys) t1
 
 
-{-| Provides table of all the rows in the second table that do not occur in any key-matched
-rows in the first table.
+{-| Provides a table of all the rows in the second table that do not occur in any
+key-matched rows in the first table.
 
     rightDiff ( table1, "Key1" ) ( table2, "Key2" )
 
@@ -915,7 +921,7 @@ rightDiff =
 
 
 
--- ------------------------------- Private
+-- --------------------------------------------------------------------- Private
 {- Type of data stored in the cells that make up a table. -}
 
 
