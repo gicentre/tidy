@@ -67,6 +67,13 @@ z20,    z21, z22, z23
                 |> Tidy.insertColumn "col" [ "0", "1", "2", "3", "0", "1", "2", "3", "0", "1", "2", "3" ]
                 |> Tidy.insertColumn "z" [ "z00", "z01", "z02", "z03", "z10", "z11", "z12", "z13", "z20", "z21", "z22", "z23" ]
 
+        gridTableBisected =
+            Tidy.empty
+                |> Tidy.insertColumn "row" [ "0", "0", "0", "0", "1", "1", "1", "1", "2", "2", "2", "2" ]
+                |> Tidy.insertColumn "col" [ "0", "1", "2", "3", "0", "1", "2", "3", "0", "1", "2", "3" ]
+                |> Tidy.insertColumn "zr" [ "z0", "z0", "z0", "z0", "z1", "z1", "z1", "z1", "z2", "z2", "z2", "z2" ]
+                |> Tidy.insertColumn "zc" [ "z0", "z1", "z2", "z3", "z0", "z1", "z2", "z3", "z0", "z1", "z2", "z3" ]
+
         gridTableRagged =
             Tidy.empty
                 |> Tidy.insertColumn "row" [ "0", "0", "0", "0", "1", "1", "1", "1", "1", "2", "2", "2", "2", "3", "3" ]
@@ -93,6 +100,12 @@ z20,    z21, z22, z23
             Tidy.empty
                 |> Tidy.insertColumn "Person" [ "John Smith", "Jane Doe", "Mary Johnson" ]
                 |> Tidy.insertColumn "treatmenta" [ "", "16", "3" ]
+                |> Tidy.insertColumn "treatmentb" [ "2", "11", "1" ]
+
+        table4NoBlanks =
+            Tidy.empty
+                |> Tidy.insertColumn "Person" [ "John Smith", "Jane Doe", "Mary Johnson" ]
+                |> Tidy.insertColumn "treatmenta" [ "0", "16", "3" ]
                 |> Tidy.insertColumn "treatmentb" [ "2", "11", "1" ]
 
         jTable1DiffKey =
@@ -342,4 +355,34 @@ z20,    z21, z22, z23
                 \_ ->
                     Tidy.rightDiff ( jTable1SameKey, "Unmatched" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
             ]
+        , describe "columnMapping"
+            [ test "noBlanksMap" <|
+                \_ ->
+                    Tidy.mapColumn "treatmenta" impute table4 |> Expect.equal table4NoBlanks
+            , test "identityMap" <|
+                \_ ->
+                    Tidy.mapColumn "colB" identity jTable1SameKey |> Expect.equal jTable1SameKey
+            , test "missingcol" <|
+                \_ ->
+                    Tidy.mapColumn "nonExistentColumn" (always "Should never happen") jTable2DiffKey |> Expect.equal jTable2DiffKey
+            ]
+        , describe "bisecting"
+            [ test "bisectedGrid" <|
+                \_ ->
+                    Tidy.bisect "z" zBisect ( "zr", "zc" ) gridTable |> Expect.equal gridTableBisected
+            ]
         ]
+
+
+impute : String -> String
+impute val =
+    if val == "" then
+        "0"
+
+    else
+        val
+
+
+zBisect : String -> ( String, String )
+zBisect val =
+    ( String.left 2 val, String.left 1 val ++ String.right 1 val )

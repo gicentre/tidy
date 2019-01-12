@@ -9,8 +9,10 @@ module Tidy exposing
     , renameColumn
     , insertColumn
     , removeColumn
+    , mapColumn
     , filterColumns
     , melt
+    , bisect
     , transposeTable
     , leftJoin
     , rightJoin
@@ -46,6 +48,7 @@ module Tidy exposing
 @docs renameColumn
 @docs insertColumn
 @docs removeColumn
+@docs mapColumn
 @docs filterColumns
 
 
@@ -58,15 +61,16 @@ many data analytical functions.
 
 Common problems with data that are not in tidy format ("messy" data) include:
 
-  - Column headers are values not variable names
-  - Multiple variables are stored in the same column
-  - Variables arranged in rows as well as columns
-  - Multiple types of observational unit are stored in the same table
-  - The same observational unit is stored in multiple tables.
+  - Column headers are values not variable names (solved with [melt](#melt)).
+  - Multiple variables are stored in the same column (solved with [bisect](#bisect)).
+  - Variables arranged in rows as well as columns (solved with [filterRows](#filterRows)).
+  - Multiple types of observational unit are stored in the same table (solved with [filterColumns](#filterColumns)).
+  - The same observational unit is stored in multiple tables. (solved with joins such as [leftJoin](#leftJoin)).
 
 Messy data can be tidied with a small number of simple operations.
 
 @docs melt
+@docs bisect
 @docs transposeTable
 
 
@@ -327,6 +331,31 @@ in the table, the original table is returned.
 removeColumn : String -> Table -> Table
 removeColumn colName =
     getColumns >> remove colName >> compactIndices 0 >> toTable
+
+
+{-| Transform the contents of the given column (first parameter) with a mapping
+function (second parameter). For example
+
+    mapColumn "myColumnHeading" impute myTable
+
+    impute val =
+        if val == "" then
+            "0"
+
+        else
+            val
+
+If the column name is not found, the original table is returned.
+
+-}
+mapColumn : String -> (String -> String) -> Table -> Table
+mapColumn heading fn tbl =
+    case getColumns tbl |> getColumn heading of
+        Just colValues ->
+            tbl |> insertColumn heading (List.map fn colValues)
+
+        Nothing ->
+            tbl
 
 
 {-| Extract the values of the column with the given name (first parameter) from a
@@ -629,6 +658,32 @@ melt columnName valueName colVars table =
                     extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
     in
     extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices 0 |> toTable
+
+
+{-| Split a named column (first parameter) into two with a bisecting function
+(second parameter). The third parameter should be the names to give the two new
+columns, which are inserted into the table replacing the original bisected column.
+
+    TODO: Example here
+
+If the column name is not found, the original table is returned.
+
+-}
+bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
+bisect heading bisector ( newHeading1, newHeading2 ) tbl =
+    case getColumns tbl |> getColumn heading of
+        Just colValues ->
+            let
+                newCols =
+                    List.map bisector colValues |> List.unzip
+            in
+            tbl
+                |> insertColumn newHeading1 (Tuple.first newCols)
+                |> insertColumn newHeading2 (Tuple.second newCols)
+                |> removeColumn heading
+
+        Nothing ->
+            tbl
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
