@@ -5529,7 +5529,7 @@ var elm$core$Tuple$first = function (_n0) {
 	var x = _n0.a;
 	return x;
 };
-var author$project$Tidy$melt = F4(
+var author$project$Tidy$gather = F4(
 	function (columnName, valueName, colVars, table) {
 		var numCols = elm$core$Dict$size(
 			author$project$Tidy$getColumns(table));
@@ -5558,7 +5558,7 @@ var author$project$Tidy$melt = F4(
 							author$project$Tidy$getColumns(table))))));
 		var colToVarLookup = elm$core$Dict$fromList(colVars);
 		var newRows = function (columns) {
-			var unmeltedCol = function (_n7) {
+			var ungatheredCol = function (_n7) {
 				var _n8 = _n7.a;
 				var n = _n8.a;
 				var oldHeading = _n8.b;
@@ -5574,11 +5574,11 @@ var author$project$Tidy$melt = F4(
 							val));
 				}
 			};
-			var unmeltedCols = A2(
+			var ungatheredCols = A2(
 				elm$core$List$filterMap,
-				unmeltedCol,
+				ungatheredCol,
 				author$project$Tidy$columnsHead(columns));
-			var meltCol = function (_n4) {
+			var gatherCol = function (_n4) {
 				var _n5 = _n4.a;
 				var oldHeading = _n5.b;
 				var val = _n4.b;
@@ -5602,11 +5602,11 @@ var author$project$Tidy$melt = F4(
 			return A2(
 				elm$core$List$map,
 				function (x) {
-					return _Utils_ap(x, unmeltedCols);
+					return _Utils_ap(x, ungatheredCols);
 				},
 				A2(
 					elm$core$List$filterMap,
-					meltCol,
+					gatherCol,
 					author$project$Tidy$columnsHead(columns)));
 		};
 		var addToColumn = F3(
@@ -6338,12 +6338,12 @@ var author$project$Tidy$fromCSV = function () {
 					author$project$Tidy$toTable))));
 }();
 var author$project$WickhamExamples$messy9 = author$project$Tidy$fromCSV('country,year,m014,m1524,m2534,m3544,m4554,m5564,m65,mu,f014,f1524,f2534,f3544,f4554,f5564,f65,fu\nAD,2000,0,0,1,0,0,0,0,"","","","","","","","",""\nAE,2000,2,4,4,6,5,12,10,"",3,16,1,3,0,0,4,""\nAF,2000,52,228,183,149,129,94,80,"",93,414,565,339,205,99,36,""\nAG,2000,0,0,0,0,0,0,1,"",1,1,1,0,0,0,0,""\nAL,2000,2,19,21,14,24,19,16,"",3,11,10,8,8,5,11,""\nAM,2000,2,152,130,131,63,26,21,"",1,24,27,24,8,8,4,""\nAN,2000,0,0,1,2,0,0,0,"",0,0,1,0,0,1,0,""\nAO,2000,186,999,1003,912,482,312,194,"",247,1142,1091,844,417,200,120,""\nAR,2000,97,278,594,402,419,368,330,"",121,544,479,262,230,179,216,""\nAS,2000,"","","","",1,1,"","","","","","",1,"","",""\n');
-var author$project$WickhamExamples$melted10a = A3(
+var author$project$WickhamExamples$gathered10a = A3(
 	author$project$Tidy$filterRows,
 	'cases',
 	elm$core$Basics$neq(''),
 	A4(
-		author$project$Tidy$melt,
+		author$project$Tidy$gather,
 		'column',
 		'cases',
 		A2(
@@ -6505,7 +6505,7 @@ var author$project$Tidy$transposeTable = F3(
 	});
 var author$project$WickhamExamples$messy2 = A3(author$project$Tidy$transposeTable, 'Person', 'Treatment', author$project$WickhamExamples$messy1);
 var author$project$WickhamExamples$messy4 = author$project$Tidy$fromCSV('\nreligion,<$10k,$10-20k,$20-30k,$30-40k,$40-50k,$50-75k,$75-100k,$100-150k,>150k,Don\'t know/refused\nAgnostic,                 27,  34,   60,  81,  76,  137, 122, 109,  84,   96\nAtheist,                  12,  27,   37,  52,  35,   70,  73,  59,  74,   76\nBuddhist,                 27,  21,   30,  34,  33,   58,  62,  39,  53,   54\nCatholic,                418, 617,  732, 670, 638, 1116, 949, 792, 633, 1489\nDon\'t know/refused,       15,  14,   15,  11,  10,   35,  21,  17,  18,  116\nEvangelical Prot,        575, 869, 1064, 982, 881, 1486, 949, 723, 414, 1529\nHindu,                     1,   9,    7,   9,  11,   34,  47,  48,  54,   37\nHistorically Black Prot, 228, 224,  236, 238, 197,  223, 131,  81,  78,  339\nJehovah\'s Witness,        20,  27,   24,  24,  21,   30,  15,  11,   6,   37\nJewish,                   19,  19,   25,  25,  30,   95,  69,  87, 151,  162\n');
-var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear,artist,track,time, date.entered,wk1,wk2,wk3,wk4,wk5,wk6,wk7\n2000,2 Pac,Baby Don\'t Cry,4:22, 2000-02-26,87,82,72,77,87,94,99\n2000,2Ge+her,The Hardest Part Of...,3:15,2000-09-02,91,87,92,"","","",""\n2000,3 Doors Down,Kryptonite,3:15,2000-04-08,81,70,68,67,66,57,54\n2000,98^0,Give Me Just One Night,3:24,2000-08-19,51,39,34,26,26,19,2\n2000,A*Teens,Dancing Queen,3:44, 2000-07-08,97,97,96,95,100,"",""\n2000,Aaliyah,I Don\'t Wanna,4:15, 2000-01-29,84,62,51,41,38,35,35\n2000,Aaliyah,Try Again,4:03, 2000-03-18,59,53,38,28,21,18,16\n2000,"Adams, Yolanda",Open My Heart,5:30,2000-08-26,76,76,74,69,68,67,61\n');
+var author$project$WickhamExamples$messy7 = author$project$Tidy$fromCSV('\nyear,artist,track,time, date.entered,wk1,wk2,wk3,wk4,wk5,wk6,wk7\n2000,2 Pac,Baby Don\'t Cry,4:22, 2000-02-26,87,82,72,77,87,94,99\n2000,2Ge+her,The Hardest Part Of...,3:15,2000-09-02,91,87,92,"","","",""\n2000,3 Doors Down,Kryptonite,3:53,2000-04-08,81,70,68,67,66,57,54\n2000,98^0,Give Me Just One Night,3:24,2000-08-19,51,39,34,26,26,19,2\n2000,A*Teens,Dancing Queen,3:44, 2000-07-08,97,97,96,95,100,"",""\n2000,Aaliyah,I Don\'t Wanna,4:15, 2000-01-29,84,62,51,41,38,35,35\n2000,Aaliyah,Try Again,4:03, 2000-03-18,59,53,38,28,21,18,16\n2000,"Adams, Yolanda",Open My Heart,5:30,2000-08-26,76,76,74,69,68,67,61\n');
 var author$project$Tidy$removeColumn = function (colName) {
 	return A2(
 		elm$core$Basics$composeR,
@@ -6614,7 +6614,7 @@ var author$project$WickhamExamples$tidy10b = function () {
 						ageLookup)));
 		},
 		_Utils_Tuple2('sex', 'age'),
-		author$project$WickhamExamples$melted10a);
+		author$project$WickhamExamples$gathered10a);
 	var cases = A2(author$project$Tidy$strColumn, 'cases', tidy);
 	return A3(
 		author$project$Tidy$insertColumn,
@@ -6623,7 +6623,7 @@ var author$project$WickhamExamples$tidy10b = function () {
 		A2(author$project$Tidy$removeColumn, 'cases', tidy));
 }();
 var author$project$WickhamExamples$tidy3 = A4(
-	author$project$Tidy$melt,
+	author$project$Tidy$gather,
 	'Treatment',
 	'result',
 	_List_fromArray(
@@ -6633,7 +6633,7 @@ var author$project$WickhamExamples$tidy3 = A4(
 		]),
 	author$project$WickhamExamples$messy1);
 var author$project$WickhamExamples$tidy6 = A4(
-	author$project$Tidy$melt,
+	author$project$Tidy$gather,
 	'income',
 	'freq',
 	_List_fromArray(
@@ -7186,7 +7186,7 @@ var author$project$WickhamExamples$tidy8 = function () {
 		'rank',
 		elm$core$Basics$neq(''),
 		A4(
-			author$project$Tidy$melt,
+			author$project$Tidy$gather,
 			'week',
 			'rank',
 			_List_fromArray(
@@ -7598,7 +7598,7 @@ var author$project$WickhamExamples$view = function (model) {
 						elm$html$Html$text('Tidied table  (table 6)')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy6)),
+				A2(author$project$Tidy$tableSummary, 10, author$project$WickhamExamples$tidy6)),
 				A2(elm$html$Html$hr, _List_Nil, _List_Nil),
 				A2(
 				elm$html$Html$h2,
@@ -7624,7 +7624,7 @@ var author$project$WickhamExamples$view = function (model) {
 						elm$html$Html$text('Date is calculated by adding week to date.entered from the messy table. Ranks outside the top 100 filtered out.')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy8)),
+				A2(author$project$Tidy$tableSummary, 15, author$project$WickhamExamples$tidy8)),
 				A2(elm$html$Html$hr, _List_Nil, _List_Nil),
 				A2(
 				elm$html$Html$h2,
@@ -7640,17 +7640,17 @@ var author$project$WickhamExamples$view = function (model) {
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('Melted table (table 10a)')
+						elm$html$Html$text('Gathered table (table 10a)')
 					])),
 				A2(
 				elm$html$Html$div,
 				_List_Nil,
 				_List_fromArray(
 					[
-						elm$html$Html$text('First, the mixed gender/age columns are melted and rows with missing data removed:')
+						elm$html$Html$text('First, the mixed gender/age columns are gathered and rows with missing data removed:')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$melted10a)),
+				A2(author$project$Tidy$tableSummary, 15, author$project$WickhamExamples$gathered10a)),
 				A2(
 				elm$html$Html$h2,
 				_List_Nil,
@@ -7666,7 +7666,7 @@ var author$project$WickhamExamples$view = function (model) {
 						elm$html$Html$text('Then the values in the mixed gender/age column are split into two (sex and age)')
 					])),
 				author$project$WickhamExamples$toHtml(
-				A2(author$project$Tidy$tableSummary, -1, author$project$WickhamExamples$tidy10b))
+				A2(author$project$Tidy$tableSummary, 15, author$project$WickhamExamples$tidy10b))
 			]));
 };
 var elm$core$Platform$Cmd$batch = _Platform_batch;

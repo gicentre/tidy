@@ -11,7 +11,8 @@ module Tidy exposing
     , removeColumn
     , mapColumn
     , filterColumns
-    , melt
+    , gather
+    , spread
     , bisect
     , transposeTable
     , leftJoin
@@ -54,22 +55,23 @@ module Tidy exposing
 
 # Tidy
 
-[Tidy data](https://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf)
-is a convention for organising tabular data such that columns represent _variables_
-and rows represent _observations_. This greatly simplifies data interchange and
-many data analytical functions.
+Arranging _tidy data_ ([Wickham, 2014](https://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf))
+is a convention for organising tabular data such that columns represent distinct
+_variables_ and rows represent _observations_. One of the implications of this
+arrangment is that row or column order carries no semantic meaning. This greatly
+simplifies data interchange and many data analytical functions.
 
-Common problems with data that are not in tidy format ("messy" data) include:
+Wickham identifies some common problems with data that are not in tidy format
+("messy" data), each of which can be solved with a small number of simple operations:
 
-  - Column headers are values not variable names (solved with [melt](#melt)).
+  - Column headers are values not variable names (solved with [gather](#gather)).
   - Multiple variables are stored in the same column (solved with [bisect](#bisect)).
-  - Variables arranged in rows as well as columns (solved with [filterRows](#filterRows)).
+  - Variables arranged in rows as well as columns (solved with [spread](#spread)).
   - Multiple types of observational unit are stored in the same table (solved with [filterColumns](#filterColumns)).
   - The same observational unit is stored in multiple tables. (solved with joins such as [leftJoin](#leftJoin)).
 
-Messy data can be tidied with a small number of simple operations.
-
-@docs melt
+@docs gather
+@docs spread
 @docs bisect
 @docs transposeTable
 
@@ -562,7 +564,7 @@ the following messy table
 | Glasgow   |  8              |  9              |
 ```
 
-can be melted to create a tidy table:
+can be gathered to create a tidy table:
 
 ```markdown
 | location  | year | temperature |
@@ -578,7 +580,7 @@ can be melted to create a tidy table:
 The first two parameters represent the heading names to be given to the column
 reference (`year` in the example above) and variable column (`temperature` in the
 example above) to be generated. The third is a list of the (columnName,columnReference)
-to be melted (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2018") ]`
+to be gathered (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2018") ]`
 above) and the final, the table to convert. For example
 
     """location,temperature2017,temperature2018
@@ -586,15 +588,15 @@ above) and the final, the table to convert. For example
     Sheffield,11,13
     Glasgow, 8,9"""
         |> fromCSV
-        |> melt "year"
+        |> gather "year"
             "temperature"
             [ ( "temperature2017", "2017" )
             , ( "temperature2018", "2018" )
             ]
 
 -}
-melt : String -> String -> List ( String, String ) -> Table -> Table
-melt columnName valueName colVars table =
+gather : String -> String -> List ( String, String ) -> Table -> Table
+gather columnName valueName colVars table =
     let
         colToVarLookup : Dict String Cell
         colToVarLookup =
@@ -616,7 +618,7 @@ melt columnName valueName colVars table =
         newRows : Columns -> List (List ( Heading, Cell ))
         newRows columns =
             let
-                meltCol ( ( _, oldHeading ), val ) =
+                gatherCol ( ( _, oldHeading ), val ) =
                     case Dict.get oldHeading colToVarLookup of
                         Just colRef ->
                             Just [ ( ( numCols, columnName ), colRef ), ( ( numCols + 1, valueName ), val ) ]
@@ -624,7 +626,7 @@ melt columnName valueName colVars table =
                         Nothing ->
                             Nothing
 
-                unmeltedCol ( ( n, oldHeading ), val ) =
+                ungatheredCol ( ( n, oldHeading ), val ) =
                     case Dict.get oldHeading colToVarLookup of
                         Just colRef ->
                             Nothing
@@ -632,13 +634,13 @@ melt columnName valueName colVars table =
                         Nothing ->
                             Just ( ( n, oldHeading ), val )
 
-                unmeltedCols =
-                    columns |> columnsHead |> List.filterMap unmeltedCol
+                ungatheredCols =
+                    columns |> columnsHead |> List.filterMap ungatheredCol
             in
             columns
                 |> columnsHead
-                |> List.filterMap meltCol
-                |> List.map (\x -> x ++ unmeltedCols)
+                |> List.filterMap gatherCol
+                |> List.map (\x -> x ++ ungatheredCols)
 
         addToColumn : Heading -> Columns -> Cell -> List Cell
         addToColumn heading columns val =
@@ -658,6 +660,14 @@ melt columnName valueName colVars table =
                     extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
     in
     extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices 0 |> toTable
+
+
+{-| TODO: XXX
+-}
+spread : Table
+spread =
+    -- TODO
+    empty
 
 
 {-| Split a named column (first parameter) into two with a bisecting function

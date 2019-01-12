@@ -30,22 +30,22 @@ view model =
         , div [] [ text "Column headings are values, not variable names." ]
         , messy4 |> tableSummary -1 |> toHtml
         , h2 [] [ text "Tidied table  (table 6)" ]
-        , tidy6 |> tableSummary -1 |> toHtml
+        , tidy6 |> tableSummary 10 |> toHtml
         , hr [] []
         , h2 [] [ text "Messy table (table 7)" ]
         , messy7 |> tableSummary -1 |> toHtml
         , h2 [] [ text "Tidied table (table 8)" ]
         , div [] [ text "Date is calculated by adding week to date.entered from the messy table. Ranks outside the top 100 filtered out." ]
-        , tidy8 |> tableSummary -1 |> toHtml
+        , tidy8 |> tableSummary 15 |> toHtml
         , hr [] []
         , h2 [] [ text "Messy table (table 9)" ]
         , messy9 |> tableSummary -1 |> toHtml
-        , h2 [] [ text "Melted table (table 10a)" ]
-        , div [] [ text "First, the mixed gender/age columns are melted and rows with missing data removed:" ]
-        , melted10a |> tableSummary -1 |> toHtml
+        , h2 [] [ text "Gathered table (table 10a)" ]
+        , div [] [ text "First, the mixed gender/age columns are gathered and rows with missing data removed:" ]
+        , gathered10a |> tableSummary 15 |> toHtml
         , h2 [] [ text "Tidy table (table 10b)" ]
         , div [] [ text "Then the values in the mixed gender/age column are split into two (sex and age)" ]
-        , tidy10b |> tableSummary -1 |> toHtml
+        , tidy10b |> tableSummary 15 |> toHtml
         ]
 
 
@@ -68,7 +68,7 @@ messy2 =
 tidy3 : Table
 tidy3 =
     messy1
-        |> melt "Treatment" "result" [ ( "treatmenta", "a" ), ( "treatmentb", "b" ) ]
+        |> gather "Treatment" "result" [ ( "treatmenta", "a" ), ( "treatmentb", "b" ) ]
 
 
 messy4 : Table
@@ -92,7 +92,7 @@ Jewish,                   19,  19,   25,  25,  30,   95,  69,  87, 151,  162
 tidy6 : Table
 tidy6 =
     messy4
-        |> melt "income"
+        |> gather "income"
             "freq"
             [ ( "<$10k", "<$10k" )
             , ( "$10-20k", "$10-20k" )
@@ -113,7 +113,7 @@ messy7 =
 year,artist,track,time, date.entered,wk1,wk2,wk3,wk4,wk5,wk6,wk7
 2000,2 Pac,Baby Don't Cry,4:22, 2000-02-26,87,82,72,77,87,94,99
 2000,2Ge+her,The Hardest Part Of...,3:15,2000-09-02,91,87,92,"","","",""
-2000,3 Doors Down,Kryptonite,3:15,2000-04-08,81,70,68,67,66,57,54
+2000,3 Doors Down,Kryptonite,3:53,2000-04-08,81,70,68,67,66,57,54
 2000,98^0,Give Me Just One Night,3:24,2000-08-19,51,39,34,26,26,19,2
 2000,A*Teens,Dancing Queen,3:44, 2000-07-08,97,97,96,95,100,"",""
 2000,Aaliyah,I Don't Wanna,4:15, 2000-01-29,84,62,51,41,38,35,35
@@ -148,7 +148,7 @@ tidy8 =
     let
         tidy =
             messy7
-                |> melt "week"
+                |> gather "week"
                     "rank"
                     [ ( "wk1", "1" )
                     , ( "wk2", "2" )
@@ -187,10 +187,10 @@ AS,2000,"","","","",1,1,"","","","","","",1,"","",""
 """ |> fromCSV
 
 
-melted10a : Table
-melted10a =
+gathered10a : Table
+gathered10a =
     messy9
-        |> melt "column"
+        |> gather "column"
             "cases"
             ([ "m014", "m1524", "m2534", "m3544", "m4554", "m5564", "m65", "mu", "f014", "f1524", "f2534", "f3544", "f4554", "f5564", "f65", "fu" ]
                 |> List.map (\s -> ( s, s ))
@@ -213,7 +213,7 @@ tidy10b =
                 |> Dict.fromList
 
         tidy =
-            melted10a
+            gathered10a
                 |> bisect "column"
                     (\s ->
                         ( String.left 1 s
