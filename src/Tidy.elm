@@ -208,7 +208,7 @@ fromGrid =
     String.lines
         >> List.filter (not << String.isEmpty)
         >> List.map (String.split ",")
-        -->> List.filter (not << String.isEmpty))
+        -- >> List.filter (not << String.isEmpty))
         >> fromGridRows
 
 
@@ -1016,6 +1016,18 @@ remove colName =
     Dict.filter (\( _, s ) _ -> s /= colName)
 
 
+
+{- Finds the column index number of the column with the given name, if it exists -}
+
+
+columnIndex : String -> Columns -> Maybe Int
+columnIndex colName =
+    Dict.keys
+        >> List.filter (\( _, heading ) -> heading == colName)
+        >> List.head
+        >> Maybe.map Tuple.first
+
+
 {-| Private version of insertColumn that allows a column index to be defined.
 Normally new columns are inserted at the end of existing ones (by inserting at
 Dict.size) but if we need to insert before others, we can provide a negative
@@ -1033,9 +1045,17 @@ insertColumnAt index heading colValues columns =
 
         extraRows =
             List.repeat (List.length colValues - numRows) ""
+
+        insertIndex =
+            case columnIndex heading columns of
+                Just i ->
+                    i
+
+                Nothing ->
+                    index
     in
     columns
-        |> Dict.insert ( index, String.trim heading ) (List.take numRows (colValues ++ extraRows))
+        |> Dict.insert ( insertIndex, String.trim heading ) (List.take numRows (colValues ++ extraRows))
 
 
 
