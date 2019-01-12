@@ -662,7 +662,33 @@ gather columnName valueName colVars table =
     extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices 0 |> toTable
 
 
-{-| TODO: XXX
+{-| The inverse of [gather](#gather), spreading a pair of columns rotates values
+to separate columns (like a _pivot_ in a spreadsheet). This is useful if different
+variables are stored in separate rows of the same column. For example the following
+table contains two different variables in the `temperature` column:
+
+```markdown
+| location  | year | readingType | temperature |
+| --------- | ---- | ----------- | ----------- |
+| Bristol   | 2018 |     minTemp |           3 |
+| Bristol   | 2018 |     maxTemp |          27 |
+| Sheffield | 2018 |     minTemp |          -2 |
+| Sheffield | 2018 |     maxTemp |          26 |
+| Glasgow   | 2018 |     minTemp |         -10 |
+| Glasgow   | 2018 |     maxTemp |          23 |
+```
+
+We can _spread_ the temperatures into separate columns reflecting their distinct
+meanings:
+
+```markdown
+| location  | year | minTemp | maxTemp |
+| --------- | ---- | ------- | ------- |
+| Bristol   | 2018 |       3 |      27 |
+| Sheffield | 2018 |      -2 |      26 |
+| Glasgow   | 2018 |     -10 |      23 |
+```
+
 -}
 spread : Table
 spread =
@@ -674,9 +700,43 @@ spread =
 (second parameter). The third parameter should be the names to give the two new
 columns, which are inserted into the table replacing the original bisected column.
 
-    TODO: Example here
+For example, given a table
 
-If the column name is not found, the original table is returned.
+```markdown
+| row | col |   z |
+| --- | --- | --- |
+|   0 |   0 | z00 |
+|   0 |   1 | z01 |
+|   0 |   2 | z02 |
+|   1 |   0 | z10 |
+|   1 |   1 | z11 |
+|   1 |   2 | z12 |
+```
+
+bisecting it with
+
+    bisect "z"
+        (\z ->
+            ( String.left 2 z
+            , String.left 1 z ++ String.right 1 z
+            )
+        )
+        ( "zr", "zc" )
+
+produces the table
+
+```markdown
+| row | col | zr | zc |
+| --- | --- | -- | -- |
+|   0 |   0 | z0 | z0 |
+|   0 |   1 | z0 | z1 |
+|   0 |   2 | z0 | z2 |
+|   1 |   0 | z1 | z0 |
+|   1 |   1 | z1 | z1 |
+|   1 |   2 | z1 | z2 |
+```
+
+If the column to be bisected is not found, the original table is returned.
 
 -}
 bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
