@@ -1,6 +1,7 @@
 module WickhamExamples exposing (main)
 
 import Browser
+import Dict exposing (Dict)
 import Html exposing (Html, div, h1, h2, h3, hr, text)
 import Iso8601
 import Markdown
@@ -36,6 +37,15 @@ view model =
         , h2 [] [ text "Tidied table (table 8)" ]
         , div [] [ text "Date is calculated by adding week to date.entered from the messy table. Ranks outside the top 100 filtered out." ]
         , tidy8 |> tableSummary -1 |> toHtml
+        , hr [] []
+        , h2 [] [ text "Messy table (table 9)" ]
+        , messy9 |> tableSummary -1 |> toHtml
+        , h2 [] [ text "Melted table (table 10a)" ]
+        , div [] [ text "First, the mixed gender/age columns are melted and rows with missing data removed:" ]
+        , melted10a |> tableSummary -1 |> toHtml
+        , h2 [] [ text "Tidy table (table 10b)" ]
+        , div [] [ text "Then the values in the mixed gender/age column are split into two (sex and age)" ]
+        , tidy10b |> tableSummary -1 |> toHtml
         ]
 
 
@@ -159,6 +169,64 @@ tidy8 =
     tidy
         |> insertColumn "date.entered" dateColumn
         |> renameColumn "date.entered" "date"
+
+
+messy9 : Table
+messy9 =
+    """country,year,m014,m1524,m2534,m3544,m4554,m5564,m65,mu,f014,f1524,f2534,f3544,f4554,f5564,f65,fu
+AD,2000,0,0,1,0,0,0,0,"","","","","","","","",""
+AE,2000,2,4,4,6,5,12,10,"",3,16,1,3,0,0,4,""
+AF,2000,52,228,183,149,129,94,80,"",93,414,565,339,205,99,36,""
+AG,2000,0,0,0,0,0,0,1,"",1,1,1,0,0,0,0,""
+AL,2000,2,19,21,14,24,19,16,"",3,11,10,8,8,5,11,""
+AM,2000,2,152,130,131,63,26,21,"",1,24,27,24,8,8,4,""
+AN,2000,0,0,1,2,0,0,0,"",0,0,1,0,0,1,0,""
+AO,2000,186,999,1003,912,482,312,194,"",247,1142,1091,844,417,200,120,""
+AR,2000,97,278,594,402,419,368,330,"",121,544,479,262,230,179,216,""
+AS,2000,"","","","",1,1,"","","","","","",1,"","",""
+""" |> fromCSV
+
+
+melted10a : Table
+melted10a =
+    messy9
+        |> melt "column"
+            "cases"
+            ([ "m014", "m1524", "m2534", "m3544", "m4554", "m5564", "m65", "mu", "f014", "f1524", "f2534", "f3544", "f4554", "f5564", "f65", "fu" ]
+                |> List.map (\s -> ( s, s ))
+            )
+        |> filterRows "cases" ((/=) "")
+
+
+tidy10b : Table
+tidy10b =
+    let
+        ageLookup =
+            [ ( "014", "0-14" )
+            , ( "1524", "15-24" )
+            , ( "2534", "25-34" )
+            , ( "3544", "35-44" )
+            , ( "4554", "45-54" )
+            , ( "5564", "55-64" )
+            , ( "65", "65+" )
+            ]
+                |> Dict.fromList
+
+        tidy =
+            melted10a
+                |> bisect "column"
+                    (\s ->
+                        ( String.left 1 s
+                        , Dict.get (String.dropLeft 1 s) ageLookup |> Maybe.withDefault "unknown"
+                        )
+                    )
+                    ( "sex", "age" )
+
+        cases =
+            strColumn "cases" tidy
+    in
+    -- Not strictly necessary, but we move the 'cases' column to the end for consistency with paper:
+    tidy |> removeColumn "cases" |> insertColumn "cases" cases
 
 
 
