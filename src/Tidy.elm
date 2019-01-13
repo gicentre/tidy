@@ -28,7 +28,7 @@ module Tidy exposing
     , toColumn
     )
 
-{-| A collection of utilities for representing tabular data and reshaping them.
+{-| Tidying shaping tabular data.
 
 @docs Table
 
@@ -57,9 +57,9 @@ module Tidy exposing
 
 Arranging _tidy data_ ([Wickham, 2014](https://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf))
 is a convention for organising tabular data such that columns represent distinct
-_variables_ and rows represent _observations_. One of the implications of this
-arrangment is that row or column order carries no semantic meaning. This greatly
-simplifies data interchange and many data analytical functions.
+_variables_ and rows represent _observations_. This isolates the semantic meaning
+of items in any column independently of all others. The effect is to greatly
+simplify data interchange and many data analytical functions.
 
 Wickham identifies some common problems with data that are not in tidy format
 ("messy" data), each of which can be solved with a small number of simple operations:
@@ -128,6 +128,7 @@ table2:
 
 import CSVParser
 import Dict exposing (Dict)
+import Set
 
 
 {-| The basic organisational unit for tabular data. Each column in a table has a
@@ -273,25 +274,32 @@ fromGridRows =
 
 
 {-| Add a row of values to a table. The new values are represented by a list of
-`(columnName,columnValue)` tuples. The columnNames should correspond to the names
-of the columns in the table to which each `columnValue` is added. Names not in the
-table to append are ignored and any unspecified columns will have an empty string
-value inserted.
+`(columnName,columnValue)` tuples. If the table being appended is not empty, the
+column names should correspond to existing columns in the table or they will be
+ignored. Any unspecified columns will have an empty string value inserted.
 -}
 insertRow : List ( String, String ) -> Table -> Table
-insertRow namedCells =
-    -- To guarantee we don't misalign columns, we always add a complete set of
-    -- column values, even if they are not all provided as parameters.
-    let
-        newValues =
-            Dict.fromList namedCells
+insertRow namedCells tbl =
+    if tableColumns tbl == Dict.empty then
+        namedCells
+            |> List.indexedMap (\n ( colHead, cell ) -> ( ( n, colHead ), [ cell ] ))
+            |> Dict.fromList
+            |> toTable
 
-        newCell colHead =
-            Dict.get colHead newValues |> Maybe.withDefault ""
-    in
-    getColumns
-        >> Dict.map (\( _, colHead ) colValues -> colValues ++ [ newCell colHead ])
-        >> toTable
+    else
+        -- To guarantee we don't misalign columns, we always add a complete set of
+        -- column values, even if they are not all provided as parameters.
+        let
+            newValues =
+                Dict.fromList namedCells
+
+            newCell colHead =
+                Dict.get colHead newValues |> Maybe.withDefault ""
+        in
+        tbl
+            |> tableColumns
+            |> Dict.map (\( _, colHead ) colValues -> colValues ++ [ newCell colHead ])
+            |> toTable
 
 
 {-| Rename the given column (first parameter) with a new name (second parameter).
@@ -300,7 +308,7 @@ by the renamed column.
 -}
 renameColumn : String -> String -> Table -> Table
 renameColumn oldName newName =
-    getColumns
+    tableColumns
         >> Dict.foldl
             (\( n, colName ) ->
                 if colName == oldName then
@@ -321,7 +329,7 @@ to match the number of rows in the table.
 -}
 insertColumn : String -> List String -> Table -> Table
 insertColumn heading colValues tbl =
-    insertColumnAt (Dict.size (getColumns tbl)) heading colValues (getColumns tbl)
+    insertColumnAt (Dict.size (tableColumns tbl)) heading colValues (tableColumns tbl)
         -- Need to compact indices in case the additional column replaces existing one.
         |> compactIndices 0
         |> toTable
@@ -332,13 +340,14 @@ in the table, the original table is returned.
 -}
 removeColumn : String -> Table -> Table
 removeColumn colName =
-    getColumns >> remove colName >> compactIndices 0 >> toTable
+    tableColumns >> remove colName >> compactIndices 0 >> toTable
 
 
 {-| Transform the contents of the given column (first parameter) with a mapping
 function (second parameter). For example
 
-    mapColumn "myColumnHeading" impute myTable
+    newTable =
+        mapColumn "myColumnHeading" impute myTable
 
     impute val =
         if val == "" then
@@ -352,7 +361,7 @@ If the column name is not found, the original table is returned.
 -}
 mapColumn : String -> (String -> String) -> Table -> Table
 mapColumn heading fn tbl =
-    case getColumns tbl |> getColumn heading of
+    case tableColumns tbl |> getColumn heading of
         Just colValues ->
             tbl |> insertColumn heading (List.map fn colValues)
 
@@ -363,18 +372,20 @@ mapColumn heading fn tbl =
 {-| Extract the values of the column with the given name (first parameter) from a
 table. The type of values in the column is determined by the given cell conversion
 function. The converter function should handle cases of missing data in the table
-as well as failed conversions (e.g. attempts to convert text into a number).
+(e.g. empty strings) as well as failed conversions (e.g. attempts to convert text
+into a number).
 
     imputeMissing : String -> Int
     imputeMissing =
         String.toFloat >> Maybe.withDefault 0
 
-    myTable |> toColumn "count" imputeMissing
+    dataColumn =
+        myTable |> toColumn "count" imputeMissing
 
 -}
 toColumn : String -> (String -> a) -> Table -> List a
 toColumn heading converter =
-    getColumns
+    tableColumns
         >> getColumn heading
         >> Maybe.withDefault []
         >> List.map converter
@@ -385,7 +396,8 @@ that fail, including missing values in the table are converted into zeros. If
 you wish to handle missing data / failed conversions in a different way, use
 [toColumn](#toColumn) instead, providing a custom converter function.
 
-    myTable |> numColumn "year"
+    dataColumn =
+        myTable |> numColumn "year"
 
 -}
 numColumn : String -> Table -> List Float
@@ -398,7 +410,8 @@ the table are represented as empty strings. If you wish to handle missing values
 in a different way, use [toColumn](#toColumn) instead, providing a custom converter
 function.
 
-    myTable |> strColumn "cityName"
+    dataColumn =
+        myTable |> strColumn "cityName"
 
 -}
 strColumn : String -> Table -> List String
@@ -410,7 +423,8 @@ strColumn heading =
 values can be represented by the case-insensitive strings `true`, `yes` and `1`
 while all other values are assumed to be false.
 
-      myTable |> toBool "isMarried"
+    dataColumn =
+        myTable |> toBool "isMarried"
 
 -}
 boolColumn : String -> Table -> List Bool
@@ -435,8 +449,8 @@ boolColumn heading =
 
 {-| Provide a textual description of a table, configurable to show a given number
 of table rows. If the number of rows to show is negative, all rows are output.
-This is designed primarily to generate markdown output, but should be interpretable
-as raw text.
+This is designed primarily to generate markdown output, but is interpretable as
+raw text.
 -}
 tableSummary : Int -> Table -> List String
 tableSummary maxRows tbl =
@@ -452,15 +466,15 @@ tableSummary maxRows tbl =
             List.map (\s -> s ++ " |") >> (::) "|"
 
         headings =
-            --tbl |> getColumns |> Dict.keys |> List.map (\( n, s ) -> String.fromInt n ++ "," ++ s) |> addDividers
-            tbl |> getColumns |> Dict.keys |> List.map Tuple.second |> addDividers
+            --tbl |> tableColumns |> Dict.keys |> List.map (\( n, s ) -> String.fromInt n ++ "," ++ s) |> addDividers
+            tbl |> tableColumns |> Dict.keys |> List.map Tuple.second |> addDividers
 
         divider =
-            tbl |> getColumns |> Dict.keys |> List.map (always "-") |> addDividers
+            tbl |> tableColumns |> Dict.keys |> List.map (always "-") |> addDividers
 
         values =
             tbl
-                |> getColumns
+                |> tableColumns
                 |> Dict.values
                 |> List.map (List.take mx)
                 |> transpose
@@ -468,17 +482,17 @@ tableSummary maxRows tbl =
                 |> List.concat
 
         numTableRows =
-            List.foldl (max << List.length) 0 (Dict.values (getColumns tbl))
+            numRows tbl
 
         continues =
             if numTableRows > mx then
-                tbl |> getColumns |> Dict.keys |> List.map (always " : ") |> addDividers
+                tbl |> tableColumns |> Dict.keys |> List.map (always " : ") |> addDividers
 
             else
                 []
 
         dimensions =
-            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size (getColumns tbl)), " columns in total." ]
+            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size (tableColumns tbl)), " columns in total." ]
     in
     [ headings, [ "\n" ], divider, [ "\n" ], values, continues, dimensions ]
         |> List.concat
@@ -490,9 +504,10 @@ name you wish to give the new row names as the second.
 
 For example,
 
-    transposeTable "location" "temperature" table
+    newTable =
+        myTable |> transposeTable "location" "temperature"
 
-where `table` stores:
+where `myTable` stores:
 
 ```markdown
 | location  | temperature2017 | temperature2018 |
@@ -522,11 +537,11 @@ transposeTable headingColumn rowName tbl =
         colToList heading columns =
             heading :: (Dict.get heading columns |> Maybe.withDefault [])
     in
-    case getColumn headingColumn (getColumns tbl) of
+    case getColumn headingColumn (tableColumns tbl) of
         Just newHeadings ->
             let
                 body =
-                    remove headingColumn (getColumns tbl)
+                    remove headingColumn (tableColumns tbl)
 
                 trBody =
                     (rowName :: newHeadings)
@@ -562,6 +577,7 @@ the following messy table
 | Bristol   | 12              | 14              |
 | Sheffield | 11              | 13              |
 | Glasgow   |  8              |  9              |
+| Aberdeen  |                 |  7              |
 ```
 
 can be gathered to create a tidy table:
@@ -575,24 +591,19 @@ can be gathered to create a tidy table:
 | Sheffield | 2018 | 13          |
 | Glasgow   | 2017 |  8          |
 | Glasgow   | 2018 |  9          |
+| Aberdeen  | 2018 |  7          |
 ```
 
-The first two parameters represent the heading names to be given to the column
-reference (`year` in the example above) and variable column (`temperature` in the
-example above) to be generated. The third is a list of the (columnName,columnReference)
-to be gathered (e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2018") ]`
-above) and the final, the table to convert. For example
+The first two parameters represent the names to be given to the new reference column
+(`year` in the example above) and variable column (`temperature` in the example
+above). The third is a list of the (columnName,columnReference) to be gathered
+(e.g. `[ ("temperature2017", "2017"), ("temperature2018", "2018") ]` above).
 
-    """location,temperature2017,temperature2018
-    Bristol,12,14
-    Sheffield,11,13
-    Glasgow, 8,9"""
-        |> fromCSV
-        |> gather "year"
-            "temperature"
-            [ ( "temperature2017", "2017" )
-            , ( "temperature2018", "2018" )
-            ]
+Only non-empty cell values in the variable column are gathered (e.g. note that only
+`Aberdeen, 2018, 7` is gathered with no entry for 2017.)
+
+If none of the `columnName`s in the third parameter is found in the table, an empty
+table is returned.
 
 -}
 gather : String -> String -> List ( String, String ) -> Table -> Table
@@ -603,12 +614,12 @@ gather columnName valueName colVars table =
             Dict.fromList colVars
 
         numCols =
-            Dict.size (getColumns table)
+            Dict.size (tableColumns table)
 
         emptyColumns : Columns
         emptyColumns =
             table
-                |> getColumns
+                |> tableColumns
                 |> Dict.keys
                 |> List.filter (\( _, s ) -> not (List.member s (List.map Tuple.first colVars)))
                 |> (++) [ ( numCols, columnName ), ( numCols + 1, valueName ) ]
@@ -646,8 +657,8 @@ gather columnName valueName colVars table =
         addToColumn heading columns val =
             (Dict.get heading columns |> Maybe.withDefault []) ++ [ val ]
 
-        addMeltedRows : List ( Heading, Cell ) -> Columns -> Columns
-        addMeltedRows row columns =
+        addGatheredRows : List ( Heading, Cell ) -> Columns -> Columns
+        addGatheredRows row columns =
             List.foldl (\( heading, val ) -> Dict.insert heading (addToColumn heading columns val)) columns row
 
         extractRows : ( Columns, Columns ) -> ( Columns, Columns )
@@ -657,9 +668,20 @@ gather columnName valueName colVars table =
                     ( oldColumns, newColumns )
 
                 row ->
-                    extractRows ( columnsTail oldColumns, List.foldr addMeltedRows newColumns (newRows oldColumns) )
+                    extractRows ( columnsTail oldColumns, List.foldr addGatheredRows newColumns (newRows oldColumns) )
+
+        gatheredTable =
+            extractRows ( tableColumns table, emptyColumns )
+                |> Tuple.second
+                |> compactIndices 0
+                |> toTable
+                |> filterRows valueName ((/=) "")
     in
-    extractRows ( getColumns table, emptyColumns ) |> Tuple.second |> compactIndices 0 |> toTable
+    if numRows gatheredTable == 0 then
+        empty
+
+    else
+        gatheredTable
 
 
 {-| The inverse of [gather](#gather), spreading a pair of columns rotates values
@@ -676,10 +698,11 @@ table contains two different variables in the `temperature` column:
 | Sheffield | 2018 |     maxTemp |          26 |
 | Glasgow   | 2018 |     minTemp |         -10 |
 | Glasgow   | 2018 |     maxTemp |          23 |
+| Aberdeen  | 2018 |     maxTemp |          14 |
 ```
 
 We can _spread_ the temperatures into separate columns reflecting their distinct
-meanings:
+meanings, generating the table:
 
 ```markdown
 | location  | year | minTemp | maxTemp |
@@ -687,13 +710,74 @@ meanings:
 | Bristol   | 2018 |       3 |      27 |
 | Sheffield | 2018 |      -2 |      26 |
 | Glasgow   | 2018 |     -10 |      23 |
+| Aberdeen  | 2018 |         |      14 |
 ```
 
+The first parameter is the name of the column containing the values that will form
+the new spread column names (`readingType` above). The second parameter is the name
+of the column containing the values to be inserted in each new column (`temperature`
+above).
+
+Missing rows (e.g. `Aberdeen, 2018, minTemp` above) are rotated as empty strings
+in the spread column. If either the the columns to spread is not found, the original
+table is returned.
+
 -}
-spread : Table
-spread =
-    -- TODO
-    empty
+spread : String -> String -> Table -> Table
+spread columnName valueName tbl =
+    -- Check that both spread columms are present
+    if not <| memberColumns columnName (tableColumns tbl) && memberColumns valueName (tableColumns tbl) then
+        tbl
+
+    else
+        let
+            -- Hash for each row excluding columnName and valueName columns
+            nonSpreadHashes =
+                tbl
+                    |> filterColumns (\c -> c /= columnName && c /= valueName)
+                    |> tableColumns
+                    |> Dict.values
+                    |> transpose
+                    |> List.map String.concat
+
+            rowHashlookup =
+                zip (List.map2 (++) (strColumn columnName tbl) nonSpreadHashes)
+                    (tbl |> tableColumns |> getColumn valueName |> Maybe.withDefault [])
+                    |> Dict.fromList
+
+            -- Hash for each columnName x rowHash combination (Cartesian product)
+            cpHashes =
+                nonSpreadHashes
+                    |> unique
+                    |> List.concatMap (\x -> List.map (\y -> ( y, y ++ x )) (tbl |> strColumn columnName |> unique))
+
+            cpValues =
+                List.map (\( _, hash ) -> Dict.get hash rowHashlookup |> Maybe.withDefault "")
+                    cpHashes
+
+            cpTable =
+                empty
+                    |> insertColumn columnName (List.map Tuple.first cpHashes)
+                    |> insertColumn valueName cpValues
+
+            newColumns =
+                tbl
+                    |> strColumn columnName
+                    |> unique
+                    |> List.map
+                        (\nc -> ( nc, cpTable |> filterRows columnName ((==) nc) |> strColumn valueName ))
+
+            newTable =
+                tbl
+                    |> filterColumns (\c -> c /= columnName && c /= valueName)
+                    |> tableColumns
+                    |> Dict.map (\( _, heading ) colVals -> List.map (\v -> ( heading, v )) colVals)
+                    |> Dict.values
+                    |> transpose
+                    |> unique
+                    |> List.foldl insertRow empty
+        in
+        List.foldl (\( nc, nvals ) t -> insertColumn nc nvals t) newTable newColumns
 
 
 {-| Split a named column (first parameter) into two with a bisecting function
@@ -741,7 +825,7 @@ If the column to be bisected is not found, the original table is returned.
 -}
 bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
 bisect heading bisector ( newHeading1, newHeading2 ) tbl =
-    case getColumns tbl |> getColumn heading of
+    case tableColumns tbl |> getColumn heading of
         Just colValues ->
             let
                 newCols =
@@ -785,7 +869,7 @@ filterRows columnName fn tbl =
                 -1
 
         colValues =
-            case getColumn columnName (getColumns tbl) of
+            case getColumn columnName (tableColumns tbl) of
                 Nothing ->
                     []
 
@@ -799,20 +883,21 @@ filterRows columnName fn tbl =
                 |> List.filter (\( n, _ ) -> List.member n colValues)
                 |> List.map Tuple.second
     in
-    tbl |> getColumns |> Dict.map filterFromCol |> toTable
+    tbl |> tableColumns |> Dict.map filterFromCol |> toTable
 
 
 {-| Keep columns in the table whose names satisfy the given test. The test should
 be a function that takes a column heading and returns either `True` or `False`
 depending on whether the column should be retained.
 
-    myTable
-        |> filterColumns (\s -> String.left 11 s == "temperature")
+    newTable =
+        myTable
+            |> filterColumns (\s -> String.left 11 s == "temperature")
 
 -}
 filterColumns : (String -> Bool) -> Table -> Table
 filterColumns fn =
-    getColumns
+    tableColumns
         >> Dict.filter (\( _, colHeading ) _ -> fn colHeading)
         >> compactIndices 0
         >> toTable
@@ -841,13 +926,13 @@ If one or both of the key columns are not found, the left table is returned.
 leftJoin : ( Table, String ) -> ( Table, String ) -> Table
 leftJoin ( t1, key1 ) ( t2, key2 ) =
     -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (getColumns t1) && memberColumns key2 (getColumns t2) then
+    if not <| memberColumns key1 (tableColumns t1) && memberColumns key2 (tableColumns t2) then
         t1
 
     else
         let
             keyCol colLabel =
-                case ( getColumn key2 (getColumns t2), getColumn colLabel (getColumns t2) ) of
+                case ( getColumn key2 (tableColumns t2), getColumn colLabel (tableColumns t2) ) of
                     ( Just ks, Just vs ) ->
                         Dict.fromList (List.map2 Tuple.pair ks vs)
 
@@ -856,7 +941,7 @@ leftJoin ( t1, key1 ) ( t2, key2 ) =
 
             tableCol colLabel =
                 List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
-                    (getColumn key1 (getColumns t1) |> Maybe.withDefault [])
+                    (getColumn key1 (tableColumns t1) |> Maybe.withDefault [])
 
             leftInsert ( n, label2 ) columns =
                 if memberColumns label2 columns then
@@ -865,7 +950,7 @@ leftJoin ( t1, key1 ) ( t2, key2 ) =
                 else
                     columns |> Dict.insert ( n, label2 ) (tableCol label2)
         in
-        List.foldl leftInsert (getColumns t1) (Dict.keys (getColumns t2 |> compactIndices (Dict.size (getColumns t1))))
+        List.foldl leftInsert (tableColumns t1) (Dict.keys (tableColumns t2 |> compactIndices (Dict.size (tableColumns t1))))
             |> compactIndices 0
             |> toTable
 
@@ -918,7 +1003,7 @@ If one or both of the key columns are not found, this produces an empty table.
 innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
 innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
     -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (getColumns oldT1) && memberColumns key2 (getColumns oldT2) then
+    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
         empty
 
     else
@@ -933,7 +1018,7 @@ innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
                 leftJoin ( t1, keyName ) ( t2, keyName )
 
             t2Keys =
-                getColumn keyName (getColumns t2) |> Maybe.withDefault []
+                getColumn keyName (tableColumns t2) |> Maybe.withDefault []
         in
         leftJoin ( t1, keyName ) ( t2, keyName )
             |> filterRows keyName (\s -> List.member s t2Keys)
@@ -964,8 +1049,7 @@ If one or both of the key columns are not found, this produces an empty table.
 outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
 outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
     -- TODO: What to do when tables have some common column names?
-    -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (getColumns oldT1) && memberColumns key2 (getColumns oldT2) then
+    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
         empty
 
     else
@@ -977,7 +1061,7 @@ outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
                 oldT2 |> renameColumn key2 keyName
 
             leftColumns =
-                leftJoin ( t1, keyName ) ( t2, keyName ) |> getColumns
+                leftJoin ( t1, keyName ) ( t2, keyName ) |> tableColumns
 
             rightTable =
                 rightJoin ( t1, keyName ) ( t2, keyName )
@@ -987,7 +1071,7 @@ outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
                     (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
                     rightTable
         in
-        Dict.map (\( n, k ) v -> v ++ (getColumn k (getColumns diff) |> Maybe.withDefault [])) leftColumns
+        Dict.map (\( n, k ) v -> v ++ (getColumn k (tableColumns diff) |> Maybe.withDefault [])) leftColumns
             |> toTable
 
 
@@ -1011,13 +1095,13 @@ not found, the first table is returned.
 -}
 leftDiff : ( Table, String ) -> ( Table, String ) -> Table
 leftDiff ( t1, key1 ) ( t2, key2 ) =
-    if not <| memberColumns key1 (getColumns t1) then
+    if not <| memberColumns key1 (tableColumns t1) then
         empty
 
     else
         let
             t2Keys =
-                getColumn key2 (getColumns t2) |> Maybe.withDefault []
+                getColumn key2 (tableColumns t2) |> Maybe.withDefault []
         in
         filterRows key1 (\s -> not <| List.member s t2Keys) t1
 
@@ -1030,7 +1114,7 @@ key-matched rows in the first table.
 would generate
 
 ```markdown
-| Key2 | colA | colB |
+| Key2 | colC | colD |
 | ---- | ---- | ---- |
 | k6   | c6   | d6   |
 | k8   | c8   | d8   |
@@ -1089,12 +1173,50 @@ transpose xss =
 
 
 
+{- Remove repetitions from a list preserving the original order of non-repeated
+   items. From
+   [List.extra](https://package.elm-lang.org/packages/elm-community/list-extra/latest/List-Extra),
+-}
+
+
+unique : List comparable -> List comparable
+unique list =
+    let
+        uniqueHelp f existing remaining accumulator =
+            case remaining of
+                [] ->
+                    List.reverse accumulator
+
+                first :: rest ->
+                    let
+                        computedFirst =
+                            f first
+                    in
+                    if Set.member computedFirst existing then
+                        uniqueHelp f existing rest accumulator
+
+                    else
+                        uniqueHelp f (Set.insert computedFirst existing) rest (first :: accumulator)
+    in
+    uniqueHelp identity Set.empty list []
+
+
+
+{- Zips two lists together as a list of tuples -}
+
+
+zip : List a -> List b -> List ( a, b )
+zip =
+    List.map2 Tuple.pair
+
+
+
 {- Provides the first row of values for each column in the table. -}
 
 
 columnsHead : Columns -> List ( Heading, Cell )
 columnsHead columns =
-    if List.foldl (max << List.length) 0 (Dict.values columns) == 0 then
+    if (columns |> Dict.values |> List.head |> Maybe.withDefault []) == [] then
         []
 
     else
@@ -1161,15 +1283,15 @@ index for example.
 insertColumnAt : Int -> String -> List String -> Columns -> Columns
 insertColumnAt index heading colValues columns =
     let
-        numRows =
+        colSize =
             if columns == Dict.empty then
                 List.length colValues
 
             else
-                List.foldl (max << List.length) 0 (Dict.values columns)
+                columns |> Dict.values |> List.head |> Maybe.withDefault [] |> List.length
 
         extraRows =
-            List.repeat (List.length colValues - numRows) ""
+            List.repeat (List.length colValues - colSize) ""
 
         insertIndex =
             case columnIndex heading columns of
@@ -1180,7 +1302,7 @@ insertColumnAt index heading colValues columns =
                     index
     in
     columns
-        |> Dict.insert ( insertIndex, String.trim heading ) (List.take numRows (colValues ++ extraRows))
+        |> Dict.insert ( insertIndex, String.trim heading ) (List.take colSize (colValues ++ extraRows))
 
 
 
@@ -1199,13 +1321,22 @@ columnsTail =
     Dict.map (always (List.drop 1))
 
 
+numRows : Table -> Int
+numRows =
+    tableColumns
+        >> Dict.values
+        >> List.head
+        >> Maybe.withDefault []
+        >> List.length
+
+
 toTable : Columns -> Table
 toTable cols =
     Table { columns = cols }
 
 
-getColumns : Table -> Columns
-getColumns tbl =
+tableColumns : Table -> Columns
+tableColumns tbl =
     case tbl of
         Table cols ->
             .columns cols

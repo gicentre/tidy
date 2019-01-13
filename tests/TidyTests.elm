@@ -205,6 +205,20 @@ z20,    z21, z22, z23
                 |> Tidy.insertColumn "colB" [ "b1", "b2", "b3", "b4", "", "" ]
                 |> Tidy.insertColumn "colC" [ "", "c2", "", "c4", "c6", "c8" ]
                 |> Tidy.insertColumn "colD" [ "", "d2", "", "d4", "d6", "d8" ]
+
+        gatherTable =
+            Tidy.empty
+                |> Tidy.insertColumn "location" [ "Bristol", "Bristol", "Sheffield", "Sheffield", "Glasgow", "Glasgow", "Aberdeen" ]
+                |> Tidy.insertColumn "year" (List.repeat 7 "2018")
+                |> Tidy.insertColumn "readingType" [ "minTemp", "maxTemp", "minTemp", "maxTemp", "minTemp", "maxTemp", "maxTemp" ]
+                |> Tidy.insertColumn "temperature" [ "3", "27", "-2", "26", "-10", "23", "14" ]
+
+        spreadTable =
+            Tidy.empty
+                |> Tidy.insertColumn "location" [ "Bristol", "Sheffield", "Glasgow", "Aberdeen" ]
+                |> Tidy.insertColumn "year" (List.repeat 4 "2018")
+                |> Tidy.insertColumn "minTemp" [ "3", "-2", "-10", "" ]
+                |> Tidy.insertColumn "maxTemp" [ "27", "26", "23", "14" ]
     in
     describe "Table generation and column output conversion"
         [ describe "fromCSV"
@@ -370,6 +384,14 @@ z20,    z21, z22, z23
             [ test "bisectedGrid" <|
                 \_ ->
                     Tidy.bisect "z" zBisect ( "zr", "zc" ) gridTable |> Expect.equal gridTableBisected
+            ]
+        , describe "spreadingAndGathering"
+            [ test "spreadTemperatures" <|
+                \_ ->
+                    Tidy.spread "readingType" "temperature" gatherTable |> Expect.equal spreadTable
+            , test "gatherTemperatures" <|
+                \_ ->
+                    Tidy.gather "readingType" "temperature" [ ( "minTemp", "minTemp" ), ( "maxTemp", "maxTemp" ) ] spreadTable |> Expect.equal gatherTable
             ]
         ]
 
