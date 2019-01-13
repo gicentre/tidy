@@ -568,7 +568,7 @@ transposeTable headingColumn rowName tbl =
 
 
 {-| Combine several columns that represent the same variable into two columns, one
-referencing the original column, the other the values of the variable. For example
+referencing the original column, the other the values of the variable. For example,
 the following messy table
 
 ```markdown
@@ -686,7 +686,7 @@ gather columnName valueName colVars table =
 
 {-| The inverse of [gather](#gather), spreading a pair of columns rotates values
 to separate columns (like a _pivot_ in a spreadsheet). This is useful if different
-variables are stored in separate rows of the same column. For example the following
+variables are stored in separate rows of the same column. For example, the following
 table contains two different variables in the `temperature` column:
 
 ```markdown
@@ -719,7 +719,7 @@ of the column containing the values to be inserted in each new column (`temperat
 above).
 
 Missing rows (e.g. `Aberdeen, 2018, minTemp` above) are rotated as empty strings
-in the spread column. If either the the columns to spread is not found, the original
+in the spread column. If either of the columns to spread is not found, the original
 table is returned.
 
 -}
