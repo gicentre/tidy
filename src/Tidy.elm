@@ -24,7 +24,7 @@ module Tidy exposing
     , tableSummary
     , numColumn
     , strColumn
-    , boolColumn
+    , booColumn
     , toColumn
     )
 
@@ -119,7 +119,7 @@ table2:
 
 @docs numColumn
 @docs strColumn
-@docs boolColumn
+@docs booColumn
 @docs toColumn
 
 -}
@@ -424,11 +424,11 @@ values can be represented by the case-insensitive strings `true`, `yes` and `1`
 while all other values are assumed to be false.
 
     dataColumn =
-        myTable |> toBool "isMarried"
+        myTable |> booColumn "isMarried"
 
 -}
-boolColumn : String -> Table -> List Bool
-boolColumn heading =
+booColumn : String -> Table -> List Bool
+booColumn heading =
     let
         toBool str =
             case str |> String.trim |> String.toLower of
