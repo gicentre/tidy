@@ -28,7 +28,7 @@ module Tidy exposing
     , toColumn
     )
 
-{-| Tidying shaping tabular data.
+{-| Tidy and shape tabular data.
 
 @docs Table
 
