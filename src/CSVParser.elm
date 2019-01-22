@@ -1,151 +1,148 @@
-module CSVParser exposing (parse)
+module CSVParser exposing (parse, parseDelimited)
 
-{-| Adapted from [Brian Hicks' example](https://gist.github.com/BrianHicks/165554b033eb797e3ed851964ecb3a38)
+{-| Adapted from <https://github.com/lovasoa/elm-csv>
 -}
-
-import Parser exposing ((|.), (|=), Parser)
 
 
 parse : String -> List (List String)
-parse input =
-    case parseWithSeparators defaultSeparators input of
-        Ok (CSV Plain items) ->
-            items
-                |> List.filter (not << List.isEmpty)
-                |> List.map (List.map String.trim)
+parse =
+    parseWith ","
+        >> mergeWithHeaders
 
-        _ ->
-            []
+
+parseDelimited : Char -> String -> List (List String)
+parseDelimited delimiter =
+    parseWith (String.fromChar delimiter)
+        >> mergeWithHeaders
 
 
 
 -----------------------------------------------------------------------  Private
 
 
-type alias Row =
-    List String
+type alias Csv =
+    { headers : List String
+    , records : List (List String)
+    }
 
 
-type Plain
-    = Plain
+mergeWithHeaders : Csv -> List (List String)
+mergeWithHeaders csv =
+    .headers csv :: .records csv
 
 
-type WithNamedFields
-    = WithNamedFields Row
-    | EmptyHeaders
-
-
-type CSV a
-    = CSV a (List Row)
-
-
-type alias Separators =
-    { value : Char }
-
-
-defaultSeparators : Separators
-defaultSeparators =
-    { value = ',' }
-
-
-parseWithSeparators : Separators -> String -> Result (List Parser.DeadEnd) (CSV Plain)
-parseWithSeparators separators raw =
-    Parser.run (rows separators) raw
-
-
-rows : Separators -> Parser (CSV Plain)
-rows separators =
-    Parser.map (CSV Plain) (Parser.loop [] (rowsHelp separators))
-
-
-rowsHelp : Separators -> List Row -> Parser (Parser.Step (List Row) (List Row))
-rowsHelp separators revRows =
-    Parser.oneOf
-        [ Parser.end
-            |> Parser.map (\_ -> Parser.Done (List.reverse revRows))
-        , row separators
-            |> Parser.map (\newRow -> Parser.Loop (newRow :: revRows))
-        ]
-
-
-row : Separators -> Parser Row
-row separators =
-    Parser.loop [] (rowHelp separators)
-
-
-rowHelp : Separators -> Row -> Parser (Parser.Step Row Row)
-rowHelp separators revVals =
+parseWith : String -> String -> Csv
+parseWith separator lines =
     let
-        doneWhen : Parser a -> Parser (Parser.Step Row Row)
-        doneWhen =
-            Parser.map (\_ -> Parser.Done (List.reverse revVals))
+        values =
+            splitWith separator lines
 
-        nextWhen : Parser String -> Parser (Parser.Step Row Row)
-        nextWhen =
-            Parser.map (\newVal -> Parser.Loop (newVal :: revVals))
+        headers =
+            List.head values
+                |> Maybe.withDefault []
+
+        records =
+            List.drop 1 values
     in
-    Parser.oneOf
-        [ doneWhen Parser.end
-        , doneWhen (Parser.token "\n")
-        , Parser.token (String.fromChar separators.value) |> skipTo revVals
-        , nextWhen quotedValue
-
-        -- TODO: token for \r\n after updating elm-format. It automatically
-        -- formats to the wrong/old syntax for specifying codepoints in the
-        -- version I have installed ATM
-        , Parser.chompWhile (\c -> c /= '\n' && c /= separators.value)
-            |> Parser.getChompedString
-            |> nextWhen
-        ]
+    { headers = headers
+    , records = records
+    }
 
 
-quotedValue : Parser String
-quotedValue =
-    Parser.succeed identity
-        |. Parser.token "\""
-        |= Parser.loop "" quotedValueHelp
-        |> Parser.andThen
-            (\final ->
-                case final of
-                    Ok good ->
-                        Parser.succeed good
-
-                    Err err ->
-                        Parser.problem err
-            )
+split : String -> List (List String)
+split =
+    splitWith ","
 
 
-quotedValueHelp : String -> Parser (Parser.Step String (Result String String))
-quotedValueHelp soFar =
+splitWith : String -> String -> List (List String)
+splitWith separator lines =
     let
-        subAndLoop : String -> Parser a -> Parser (Parser.Step String b)
-        subAndLoop alt parser =
-            parser
-                |> Parser.map (\_ -> Parser.Loop (soFar ++ alt))
+        values =
+            String.lines lines
+                |> List.filter (\x -> not (String.isEmpty x))
     in
-    Parser.oneOf
-        [ Parser.end |> Parser.map (\_ -> Parser.Done (Err "I reached the end of the input while trying to parse a quoted string."))
-        , Parser.token "\"\"" |> subAndLoop "\""
-        , Parser.token "\\\"" |> subAndLoop "\""
-        , Parser.token "\\" |> skipTo soFar
-        , Parser.token "\""
-            |> Parser.map (\_ -> Parser.Done (Ok soFar))
-        , Parser.chompWhile (\c -> c /= '\\' && c /= '"')
-            |> Parser.getChompedString
-            |> Parser.map (\newPortion -> Parser.Loop (soFar ++ newPortion))
-        ]
+    List.map (splitLineWith separator) values
 
 
-skipTo : b -> Parser a -> Parser (Parser.Step b c)
-skipTo soFar =
-    Parser.map (\_ -> Parser.Loop soFar)
+splitLine : String -> List String
+splitLine =
+    splitLineWith ","
 
 
-firstRowAreNames : CSV Plain -> CSV WithNamedFields
-firstRowAreNames (CSV _ rowsAndHeader) =
-    case rowsAndHeader of
-        head :: body ->
-            CSV (WithNamedFields head) body
+splitLineWith : String -> String -> List String
+splitLineWith separator line =
+    parseRemaining separator False line []
+        |> List.reverse
 
-        [] ->
-            CSV EmptyHeaders rowsAndHeader
+
+parseRemaining : String -> Bool -> String -> List String -> List String
+parseRemaining separator quoted remaining done =
+    if remaining == "" then
+        done
+
+    else if separator /= "" && not quoted && String.startsWith separator remaining then
+        let
+            newQuoted =
+                False
+
+            nextChars =
+                String.dropLeft (String.length separator) remaining
+        in
+        parseRemaining separator False nextChars ("" :: done)
+
+    else
+        let
+            current =
+                List.head done |> Maybe.withDefault ""
+
+            others =
+                List.tail done |> Maybe.withDefault []
+
+            nextChar =
+                String.slice 0 1 remaining
+
+            nextNextChar =
+                String.slice 1 2 remaining
+
+            startQuote =
+                nextChar == "\"" && nextNextChar /= "\"" && current == ""
+
+            doubleQuote =
+                nextChar == "\"" && nextNextChar == "\""
+
+            isEscapedQuote =
+                not quoted && (nextChar == "\\" || nextChar == "\"") && nextNextChar == "\""
+
+            endQuote =
+                quoted && nextChar == "\"" && not isEscapedQuote
+
+            newQuoted =
+                (quoted && not endQuote) || startQuote
+
+            nextChars =
+                String.dropLeft
+                    (if isEscapedQuote || doubleQuote then
+                        2
+
+                     else
+                        1
+                    )
+                    remaining
+
+            newChar =
+                if doubleQuote then
+                    ""
+
+                else if isEscapedQuote then
+                    "\""
+
+                else if startQuote || endQuote then
+                    ""
+
+                else
+                    nextChar
+
+            newDone =
+                (current ++ newChar) :: others
+        in
+        parseRemaining separator newQuoted nextChars newDone

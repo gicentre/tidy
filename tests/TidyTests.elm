@@ -8,11 +8,25 @@ import Tidy
 suite : Test
 suite =
     let
+        table1 =
+            Tidy.empty
+                |> Tidy.insertColumn "Treatment" [ "treatmenta", "treatmentb" ]
+                |> Tidy.insertColumn "John Smith" [ "", "2" ]
+                |> Tidy.insertColumn "Jane Doe" [ "16", "11" ]
+                |> Tidy.insertColumn "Mary Johnson" [ "3", "1" ]
+
         table1CSV =
             """Treatment,John Smith,Jane Doe,Mary Johnson
-treatmenta,  , 16, 3
+treatmenta,, 16, 3
 treatmentb, 2, 11, 1"""
                 |> Tidy.fromCSV
+
+        -- Note: We need to use explict '\t's to represent tabs to avoid editor reformatting as spaces.
+        table1TSV =
+            """Treatment\tJohn Smith\tJane Doe\tMary Johnson
+treatmenta\t\t16\t3
+treatmentb\t2\t11\t1"""
+                |> Tidy.fromDelimited '\t'
 
         complexCSV =
             """Name,Value
@@ -21,11 +35,24 @@ treatmentb, 2, 11, 1"""
 
 
 
+
 "Bond, James Bond",007
 Miss Moneypenny,3,,,,,,
 Spectre      ,    4   """
 
-        complexCSVTable =
+        complexTSV =
+            """Name\tValue
+            James\t1
+"James Bond"\t2
+
+
+
+
+"Bond, James Bond"\t007
+Miss Moneypenny\t3
+Spectre    \t       4   """
+
+        complexTable =
             Tidy.empty
                 |> Tidy.insertColumn "Name" [ "James", "James Bond", "Bond, James Bond", "Miss Moneypenny", "Spectre" ]
                 |> Tidy.insertColumn "Value" [ "1", "2", "007", "3", "4" ]
@@ -222,7 +249,10 @@ z20,    z21, z22, z23
     in
     describe "Table generation and column output conversion"
         [ describe "fromCSV"
-            [ test "CSV treatment column" <|
+            [ test "CSV simple table" <|
+                \_ ->
+                    table1CSV |> Expect.equal table1
+            , test "CSV treatment column" <|
                 \_ ->
                     Tidy.strColumn "Treatment" table1CSV |> Expect.equal [ "treatmenta", "treatmentb" ]
             , test "CSV column with all items" <|
@@ -240,9 +270,12 @@ z20,    z21, z22, z23
             , test "CSV numeric conversion of non-numeric column" <|
                 \_ ->
                     Tidy.numColumn "Treatment" table1CSV |> Expect.equal [ 0, 0 ]
+            , test "TSV simple table" <|
+                \_ ->
+                    table1TSV |> Expect.equal table1
             , test "Unruly CSV" <|
                 \_ ->
-                    Tidy.fromCSV complexCSV |> Expect.equal complexCSVTable
+                    Tidy.fromCSV complexCSV |> Expect.equal complexTable
             ]
         , describe "fromGrid"
             [ test "gridText" <|

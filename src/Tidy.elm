@@ -1,6 +1,7 @@
 module Tidy exposing
     ( Table
     , fromCSV
+    , fromDelimited
     , fromGrid
     , fromGridRows
     , empty
@@ -36,6 +37,7 @@ module Tidy exposing
 # Create
 
 @docs fromCSV
+@docs fromDelimited
 @docs fromGrid
 @docs fromGridRows
 @docs empty
@@ -150,17 +152,35 @@ empty =
     toTable Dict.empty
 
 
-{-| Create a table from a multi-line comma-separated string in the form:
+{-| Create a table from a multi-line comma-separated string. For example
 
-    """colLabelA,colLabelB,colLabelC,etc.
-       a1,b1,c1, etc.
-       a2,b2,c2, etc.
-       a3,b3,c3, etc.
-       etc."""
+      myTable =
+          """colA,colB,colC
+      a1,b1,c1
+      a2,b2,c2
+      a3,b3,c3"""
+              |> fromCSV
 
 -}
 fromCSV : String -> Table
 fromCSV =
+    fromDelimited ','
+
+
+{-| Create a table from a multi-line string where values are separated by the
+given delimiter (first parameter). For example, to process a tab-delimited values
+file (TSV):
+
+    myTable =
+        """colA colB colC
+    a1  b1  c1
+    a2  b2  c2
+    a3  b3  c3"""
+            |> fromDelimited '\t'
+
+-}
+fromDelimited : Char -> String -> Table
+fromDelimited delimiter =
     let
         addEntry xs =
             case xs of
@@ -170,7 +190,7 @@ fromCSV =
                 _ ->
                     identity
     in
-    CSVParser.parse
+    CSVParser.parseDelimited delimiter
         >> transpose
         >> List.indexedMap Tuple.pair
         >> List.foldl addEntry Dict.empty
