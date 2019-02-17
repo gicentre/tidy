@@ -9,6 +9,7 @@ module Tidy exposing
     , filterRows
     , renameColumn
     , insertColumn
+    , insertColumnFromJson
     , removeColumn
     , mapColumn
     , filterColumns
@@ -50,6 +51,7 @@ module Tidy exposing
 
 @docs renameColumn
 @docs insertColumn
+@docs insertColumnFromJson
 @docs removeColumn
 @docs mapColumn
 @docs filterColumns
@@ -130,6 +132,7 @@ table2:
 
 import CSVParser
 import Dict exposing (Dict)
+import Json.Decode
 import Set
 
 
@@ -210,14 +213,14 @@ into a tidy table in the form:
 
 ```markdown
 | row | col |   z |
-| --- | --- | --- |
+| --: | --: | --: |
 |   0 |   0 | z00 |
 |   0 |   1 | z01 |
 |   0 |   2 | z02 |
 |   0 |   3 | z03 |
 |   1 |   0 | z10 |
 |   1 |   1 | z11 |
-|   : |   : |   : |
+|     |     |     |
 ```
 
 Values between commas are outer-trimmed of whitespace unless enclosed in quotes
@@ -251,15 +254,15 @@ fromGrid =
 into a tidy table in the form:
 
 ```markdown
-| row | col |   z |
-| --- | --- | --- |
+| row | col | z   |
+| --: | --: | --- |
 |   0 |   0 | z00 |
 |   0 |   1 | z01 |
 |   0 |   2 | z02 |
 |   0 |   3 | z03 |
 |   1 |   0 | z10 |
 |   1 |   1 | z11 |
-|   : |   : |   : |
+|     |     |     |
 ```
 
 Input can be ragged with different numbers of columns in each row. Entirely empty
@@ -353,6 +356,91 @@ insertColumn heading colValues tbl =
         -- Need to compact indices in case the additional column replaces existing one.
         |> compactIndices 0
         |> toTable
+
+
+{-| Add a column of data extracted from a JSON string onto a table. The first parameter
+is the name of the JSON object containing the data values to add. This will become
+the name of the column in the table. The second is a list of JSON object names that
+define the path to the column object. This can be an empty list is the object is
+in an array at the root of the JSON. The third parameter is the JSON string to parse
+and the fourth the table to which a new column will be added. If there is a problem
+finding the column object, the original table is returned.
+
+For example,
+
+    json =
+        """[
+      { "person": "John Smith", "treatment": "b", "result": 2 },
+      { "person": "Jane Doe", "treatment": "a", "result": 16 },
+      { "person": "Jane Doe", "treatment": "b", "result": 11 },
+      { "person": "Mary Johnson", "treatment": "a", "result": 3 },
+      { "person": "Mary Johnson", "treatment": "b", "result": 1 }
+    ]"""
+
+    table =
+        empty
+            |> insertColumnFromJson "person" [] json
+            |> insertColumnFromJson "treatment" [] json
+            |> insertColumnFromJson "result" [] json
+
+would generate a table
+
+```markdown
+| person       | treatment | result |
+| ------------ | --------- | -----: |
+| John Smith   | b         |      2 |
+| Jane Doe     | a         |     16 |
+| Jane Doe     | b         |     11 |
+| Mary Johnson | a         |      3 |
+| Mary Johnson | b         |      1 |
+```
+
+-}
+insertColumnFromJson : String -> List String -> String -> Table -> Table
+insertColumnFromJson key path json =
+    let
+        extract keys jsVal values =
+            case keys of
+                hd :: tl ->
+                    case jsVal of
+                        JsArray list ->
+                            List.foldl (extract keys) [] list ++ values
+
+                        -- We need to match the current key with an object name
+                        JsObject object ->
+                            case Dict.get hd object of
+                                Just matchedJsVal ->
+                                    extract tl matchedJsVal values
+
+                                Nothing ->
+                                    []
+
+                        _ ->
+                            []
+
+                [] ->
+                    case jsVal of
+                        JsInt num ->
+                            String.fromInt num :: values
+
+                        JsFloat num ->
+                            String.fromFloat num :: values
+
+                        JsString s ->
+                            s :: values
+
+                        _ ->
+                            values
+    in
+    case Json.Decode.decodeString jsValDecoder json of
+        Ok jsVal ->
+            insertColumn key
+                (extract (path ++ [ key ]) jsVal []
+                    |> List.reverse
+                )
+
+        Err msg ->
+            identity
 
 
 {-| Remove a column with the given name from a table. If the column is not present
@@ -531,19 +619,19 @@ where `myTable` stores:
 
 ```markdown
 | location  | temperature2017 | temperature2018 |
-| --------- | --------------- | --------------- |
-| Bristol   | 12              | 14              |
-| Sheffield | 11              | 13              |
-| Glasgow   |  8              |  9              |
+| --------- | --------------: | --------------: |
+| Bristol   |              12 |              14 |
+| Sheffield |              11 |              13 |
+| Glasgow   |               8 |               9 |
 ```
 
 creates the following table:
 
 ```markdown
 | temperature     | Bristol | Sheffield | Glasgow |
-| --------------- | ------- | --------- | ------- |
-| temperature2017 | 12      | 11        | 8       |
-| temperature2018 | 14      | 13        | 9       |
+| --------------- | ------: | --------: | ------: |
+| temperature2017 |      12 |        11 |       8 |
+| temperature2018 |      14 |        13 |       9 |
 ```
 
 If the column to contain new headings cannot be found, an empty table is generated.
@@ -593,25 +681,25 @@ the following messy table
 
 ```markdown
 | location  | temperature2017 | temperature2018 |
-| --------- | --------------- | --------------- |
-| Bristol   | 12              | 14              |
-| Sheffield | 11              | 13              |
-| Glasgow   |  8              |  9              |
-| Aberdeen  |                 |  7              |
+| --------- | --------------: | --------------: |
+| Bristol   |              12 |              14 |
+| Sheffield |              11 |              13 |
+| Glasgow   |               8 |               9 |
+| Aberdeen  |                 |               7 |
 ```
 
 can be gathered to create a tidy table:
 
 ```markdown
 | location  | year | temperature |
-| --------- | ---- | ----------- |
-| Bristol   | 2017 | 12          |
-| Bristol   | 2018 | 14          |
-| Sheffield | 2017 | 11          |
-| Sheffield | 2018 | 13          |
-| Glasgow   | 2017 |  8          |
-| Glasgow   | 2018 |  9          |
-| Aberdeen  | 2018 |  7          |
+| --------- | ---- | ----------: |
+| Bristol   | 2017 |          12 |
+| Bristol   | 2018 |          14 |
+| Sheffield | 2017 |          11 |
+| Sheffield | 2018 |          13 |
+| Glasgow   | 2017 |           8 |
+| Glasgow   | 2018 |           9 |
+| Aberdeen  | 2018 |           7 |
 ```
 
 The first two parameters represent the names to be given to the new reference column
@@ -711,14 +799,14 @@ table contains two different variables in the `temperature` column:
 
 ```markdown
 | location  | year | readingType | temperature |
-| --------- | ---- | ----------- | ----------- |
-| Bristol   | 2018 |     minTemp |           3 |
-| Bristol   | 2018 |     maxTemp |          27 |
-| Sheffield | 2018 |     minTemp |          -2 |
-| Sheffield | 2018 |     maxTemp |          26 |
-| Glasgow   | 2018 |     minTemp |         -10 |
-| Glasgow   | 2018 |     maxTemp |          23 |
-| Aberdeen  | 2018 |     maxTemp |          14 |
+| --------- | ---- | ----------- | ----------: |
+| Bristol   | 2018 | minTemp     |           3 |
+| Bristol   | 2018 | maxTemp     |          27 |
+| Sheffield | 2018 | minTemp     |          -2 |
+| Sheffield | 2018 | maxTemp     |          26 |
+| Glasgow   | 2018 | minTemp     |         -10 |
+| Glasgow   | 2018 | maxTemp     |          23 |
+| Aberdeen  | 2018 | maxTemp     |          14 |
 ```
 
 We can _spread_ the temperatures into separate columns reflecting their distinct
@@ -726,7 +814,7 @@ meanings, generating the table:
 
 ```markdown
 | location  | year | minTemp | maxTemp |
-| --------- | ---- | ------- | ------- |
+| --------- | ---- | ------: | ------: |
 | Bristol   | 2018 |       3 |      27 |
 | Sheffield | 2018 |      -2 |      26 |
 | Glasgow   | 2018 |     -10 |      23 |
@@ -808,7 +896,7 @@ For example, given a table
 
 ```markdown
 | row | col |   z |
-| --- | --- | --- |
+| --: | --: | --- |
 |   0 |   0 | z00 |
 |   0 |   1 | z01 |
 |   0 |   2 | z02 |
@@ -831,7 +919,7 @@ produces the table
 
 ```markdown
 | row | col | zr | zc |
-| --- | --- | -- | -- |
+| --: | --: | -- | -- |
 |   0 |   0 | z0 | z0 |
 |   0 |   1 | z0 | z1 |
 |   0 |   2 | z0 | z2 |
@@ -1360,3 +1448,37 @@ tableColumns tbl =
     case tbl of
         Table cols ->
             .columns cols
+
+
+
+{- JsVal allows every JSON type to be represented. See
+   <https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure>
+-}
+
+
+type JsVal
+    = JsString String
+    | JsInt Int
+    | JsFloat Float
+    | JsArray (List JsVal)
+    | JsObject (Dict String JsVal)
+    | JsNull
+
+
+
+{- Decodes a JSON type and stores it as one of the JsVal types. Note that this single
+   type can be an array or object which can contain nested types within. See
+   https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure
+-}
+
+
+jsValDecoder : Json.Decode.Decoder JsVal
+jsValDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.map JsString Json.Decode.string
+        , Json.Decode.map JsInt Json.Decode.int
+        , Json.Decode.map JsFloat Json.Decode.float
+        , Json.Decode.list (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsArray
+        , Json.Decode.dict (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsObject
+        , Json.Decode.null JsNull
+        ]

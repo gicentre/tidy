@@ -21,6 +21,27 @@ treatmenta,, 16, 3
 treatmentb, 2, 11, 1"""
                 |> Tidy.fromCSV
 
+        json =
+            """[
+          { "person": "John Smith", "treatment": "b", "result": 2 },
+          { "person": "Jane Doe", "treatment": "a", "result": 16 },
+          { "person": "Jane Doe", "treatment": "b", "result": 11 },
+          { "person": "Mary Johnson", "treatment": "a", "result": 3 },
+          { "person": "Mary Johnson", "treatment": "b", "result": 1 }
+        ]"""
+
+        tidyTreatmentJson =
+            Tidy.empty
+                |> Tidy.insertColumnFromJson "person" [] json
+                |> Tidy.insertColumnFromJson "treatment" [] json
+                |> Tidy.insertColumnFromJson "result" [] json
+
+        tidyTreatment =
+            Tidy.empty
+                |> Tidy.insertColumn "person" [ "John Smith", "Jane Doe", "Jane Doe", "Mary Johnson", "Mary Johnson" ]
+                |> Tidy.insertColumn "treatment" [ "b", "a", "b", "a", "b" ]
+                |> Tidy.insertColumn "result" [ "2", "16", "11", "3", "1" ]
+
         -- Note: We need to use explict '\t's to represent tabs to avoid editor reformatting as spaces.
         table1TSV =
             """Treatment\tJohn Smith\tJane Doe\tMary Johnson
@@ -419,7 +440,10 @@ z20,    z21, z22, z23
                     Tidy.bisect "z" zBisect ( "zr", "zc" ) gridTable |> Expect.equal gridTableBisected
             ]
         , describe "spreadingAndGathering"
-            [ test "spreadTemperatures" <|
+            [ test "tableFromJSON" <|
+                \_ ->
+                    tidyTreatmentJson |> Expect.equal tidyTreatment
+            , test "spread" <|
                 \_ ->
                     Tidy.spread "readingType" "temperature" gatherTable |> Expect.equal spreadTable
             , test "gatherTemperatures" <|
