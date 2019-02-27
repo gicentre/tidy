@@ -3,7 +3,7 @@
     "name": "gicentre/tidy",
     "summary": "Tidy data shaping for Elm",
     "license": "BSD-3-Clause",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "exposed-modules": [
         "Tidy"
     ],
