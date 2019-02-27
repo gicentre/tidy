@@ -452,13 +452,13 @@ insertColumnFromJson key path json =
 
 {-| Add an index column to a table. The first parameter is the name to give the
 new column containing index values. The second is a prefix to add to each index
-value, useful for giving different tables different key values (or use `""` for
+value, useful for giving different tables different index values (or use `""` for
 no prefix). If the table already has a column with this name, it will be replaced
 with this index column.
 
 Creating an index column can be useful when joining tables with keys that you wish
 to guarantee are unique for each row. For example, to combine the rows of two
-tables that share the same column names:
+tables `table1` and `table2`, but which may contain repeated values:
 
     outerJoin "key"
         ( insertIndexColumn "key" "t1" table1, "key" )
