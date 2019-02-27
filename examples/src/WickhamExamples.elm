@@ -58,13 +58,6 @@ view model =
         ]
 
 
-table1TSV =
-    """Treatment\tJohn Smith\tJane Doe\tMary Johnson
-treatmenta\t\t16\t3
-treatmentb\t2\t11\t1"""
-        |> Tidy.fromDelimited '\t'
-
-
 messy1 : Table
 messy1 =
     """Person,treatmenta,treatmentb

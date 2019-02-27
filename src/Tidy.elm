@@ -10,6 +10,7 @@ module Tidy exposing
     , renameColumn
     , insertColumn
     , insertColumnFromJson
+    , insertIndexColumn
     , removeColumn
     , mapColumn
     , filterColumns
@@ -52,6 +53,7 @@ module Tidy exposing
 @docs renameColumn
 @docs insertColumn
 @docs insertColumnFromJson
+@docs insertIndexColumn
 @docs removeColumn
 @docs mapColumn
 @docs filterColumns
@@ -83,8 +85,13 @@ Wickham identifies some common problems with data that are not in tidy format
 # Join
 
 Join two tables using a common key. While not specific to tidy data, joining tidy
-tables is often more meaningful than joining messy ones. The examples below
-illustrate joining two input tables with shared key values `k2` and `k4`:
+tables is often more meaningful than joining messy ones. Joins often rely on the
+existance of a 'key' column containing unique row identifiers. If tables to be
+joined do not have such a key, they can be added with
+[insertIndexColumn](#insertIndexColumn).
+
+The examples below illustrate joining two input tables with shared key values
+`k2` and `k4`:
 
 ```markdown
 table1:
@@ -441,6 +448,48 @@ insertColumnFromJson key path json =
 
         Err msg ->
             identity
+
+
+{-| Add an index column to a table. The first parameter is the name to give the
+new column containing index values. The second is a prefix to add to each index
+value, useful for giving different tables different key values (or use `""` for
+no prefix). If the table already has a column with this name, it will be replaced
+with this index column.
+
+Creating an index column can be useful when joining tables with keys that you wish
+to guarantee are unique for each row. For example, to combine the rows of two
+tables that share the same column names:
+
+    outerJoin "key"
+        ( insertIndexColumn "key" "t1" table1, "key" )
+        ( insertIndexColumn "key" "t2" table2, "key" )
+
+-}
+insertIndexColumn : String -> String -> Table -> Table
+insertIndexColumn heading prefix tbl =
+    let
+        prefixFull =
+            if prefix == "" then
+                ""
+
+            else
+                prefix ++ "_"
+
+        indices =
+            List.range 1 (numRows tbl)
+                |> List.map
+                    (\r ->
+                        prefixFull
+                            ++ String.padLeft
+                                (tbl |> numRows |> String.fromInt |> String.length)
+                                '0'
+                                (String.fromInt r)
+                    )
+    in
+    insertColumnAt -1 heading indices (tableColumns tbl)
+        -- Need to compact indices in case the additional column replaces existing one.
+        |> compactIndices 0
+        |> toTable
 
 
 {-| Remove a column with the given name from a table. If the column is not present
