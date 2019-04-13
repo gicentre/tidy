@@ -17,6 +17,7 @@ module Tidy exposing
     , gather
     , spread
     , bisect
+    , headTail
     , transposeTable
     , leftJoin
     , rightJoin
@@ -79,6 +80,7 @@ Wickham identifies some common problems with data that are not in tidy format
 @docs gather
 @docs spread
 @docs bisect
+@docs headTail
 @docs transposeTable
 
 
@@ -301,6 +303,15 @@ fromGridRows =
         >> List.concat
         >> List.foldl addGridCell Dict.empty
         >> toTable
+
+
+{-| Convenience function for splitting a string into its first (head) and remaining
+(tail) characters. e.g. `headTail "tidy" == ("t","idy")`. Useful when using [bisect](#bisect)
+to split column values into one column of heads and another of tails.
+-}
+headTail : String -> ( String, String )
+headTail str =
+    ( String.left 1 str, String.dropLeft 1 str )
 
 
 {-| Add a row of values to a table. The new values are represented by a list of
@@ -761,6 +772,38 @@ Only non-empty cell values in the variable column are gathered (e.g. note that o
 
 If none of the `columnName`s in the third parameter is found in the table, an empty
 table is returned.
+
+For cases where more than one set of columns needs to be gathered, you can combine
+three stages: (a) gather all columns, adding a column group id; (b) bisect column
+group id and column reference; (c) spread the bisected columns. For example:
+
+    """flowID,originLong,originLat,destLong,destLat
+       1,-71.9,41.8,-71.5,41.6
+       2,-80.5,34.9,-97.6,30.2
+       3,-92.1,37.0,-86.8,43.6"""
+        |> fromCSV
+        |> gather "odCoordType"
+            "value"
+            [ ( "originLong", "oLong" )
+            , ( "originLat", "oLat" )
+            , ( "destLong", "dLong" )
+            , ( "destLat", "dLat" )
+            ]
+        |> bisect "odCoordType" headTail ( "od", "coordType" )
+        |> spread "coordType" "value"
+
+creates the table
+
+```markdown
+| flowID | od |  Long |  Lat |
+| -----: | -- | ----- | ---- |
+|      1 |  o | -71.9 | 41.8 |
+|      1 |  d | -71.5 | 41.6 |
+|      2 |  o | -80.5 | 34.9 |
+|      2 |  d | -97.6 | 30.2 |
+|      3 |  o | -92.1 | 37.0 |
+|      3 |  d | -86.8 | 43.6 |
+```
 
 -}
 gather : String -> String -> List ( String, String ) -> Table -> Table
