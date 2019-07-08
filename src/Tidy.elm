@@ -90,7 +90,7 @@ Wickham identifies some common problems with data that are not in tidy format
 
 Join two tables using a common key. While not specific to tidy data, joining tidy
 tables is often more meaningful than joining messy ones. Joins often rely on the
-existance of a 'key' column containing unique row identifiers. If tables to be
+existence of a 'key' column containing unique row identifiers. If tables to be
 joined do not have such a key, they can be added with
 [insertIndexColumn](#insertIndexColumn).
 
@@ -140,8 +140,6 @@ table2:
 @docs toColumn
 
 -}
-
---import Parser exposing ((|.), (|=), Parser)
 
 import CSVParser
 import Dict exposing (Dict)
@@ -243,7 +241,19 @@ of columns in each row.
 Note the common convention that in grids, the origin (row 0, col 0) is at the top-left,
 whereas in Cartesian coordinate systems the origin (x=0, y=0) is at the bottom-left.
 You may therefore wish to reverse the order of row values in the input string if
-you are mapping onto a Cartesian coordinate system.
+you are mapping onto a Cartesian coordinate system. For example,
+
+    """z00,z01,z02,z03
+    z10,z11,z12,z13
+    z20,z21,z22,c23
+    z30,z31,z32,c33"""
+        |> String.split "\n"
+        |> List.reverse
+        |> List.intersperse "\n"
+        |> String.concat
+        |> fromGrid
+        |> renameColumn "row" "y"
+        |> renameColumn "col" "x"
 
 -}
 fromGrid : String -> Table
@@ -678,7 +688,7 @@ toCSV =
     toDelimited ","
 
 
-{-| Provide text containing table values spearated by the given delimiter (first parameter).
+{-| Provide text containing table values separated by the given delimiter (first parameter).
 Can be useful for applications that need to save a table as a file. For example,
 to create tab-delimited (TSV) text representing a table for later saving as a file:
 
