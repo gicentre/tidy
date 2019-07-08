@@ -26,6 +26,8 @@ module Tidy exposing
     , leftDiff
     , rightDiff
     , tableSummary
+    , toCSV
+    , toDelimited
     , numColumn
     , strColumn
     , booColumn
@@ -126,6 +128,8 @@ table2:
 # Output
 
 @docs tableSummary
+@docs toCSV
+@docs toDelimited
 
 
 ## Column output
@@ -664,6 +668,44 @@ tableSummary maxRows tbl =
     in
     [ headings, [ "\n" ], divider, [ "\n" ], values, continues, dimensions ]
         |> List.concat
+
+
+{-| Provide a CSV (comma-separated values) format version of a table. Can be useful
+for applications that need to save a table as a file.
+-}
+toCSV : Table -> String
+toCSV =
+    toDelimited ","
+
+
+{-| Provide text containing table values spearated by the given delimiter (first parameter).
+Can be useful for applications that need to save a table as a file. For example,
+to create tab-delimited (TSV) text representing a table for later saving as a file:
+
+    toDelimited '\t' myTable
+
+-}
+toDelimited : String -> Table -> String
+toDelimited delimiter tbl =
+    let
+        headings =
+            tbl
+                |> tableColumns
+                |> Dict.keys
+                |> List.map Tuple.second
+                |> List.intersperse delimiter
+                |> String.concat
+
+        values =
+            tbl
+                |> tableColumns
+                |> Dict.values
+                |> transpose
+                |> List.map (\ss -> List.intersperse delimiter ss ++ [ "\n" ])
+                |> List.concat
+                |> String.concat
+    in
+    headings ++ "\n" ++ values
 
 
 {-| Transpose the rows and columns of a table. Provide the name of column that will
