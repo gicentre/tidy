@@ -249,8 +249,7 @@ you are mapping onto a Cartesian coordinate system. For example,
     z30,z31,z32,c33"""
         |> String.split "\n"
         |> List.reverse
-        |> List.intersperse "\n"
-        |> String.concat
+        |> String.join "\n"
         |> fromGrid
         |> renameColumn "row" "y"
         |> renameColumn "col" "x"
