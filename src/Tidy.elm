@@ -17,6 +17,7 @@ module Tidy exposing
     , gather
     , spread
     , bisect
+    , splitAt
     , headTail
     , transposeTable
     , leftJoin
@@ -82,6 +83,7 @@ Wickham identifies some common problems with data that are not in tidy format
 @docs gather
 @docs spread
 @docs bisect
+@docs splitAt
 @docs headTail
 @docs transposeTable
 
@@ -156,6 +158,66 @@ type
     Table
     -- Opaque type
     = Table { columns : Columns }
+
+
+{-| Split a named column (first parameter) into two with a bisecting function
+(second parameter). The third parameter should be the names to give the two new
+columns, which are inserted into the table replacing the original bisected column.
+
+For example, given a table
+
+```markdown
+| row | col |   z |
+| --: | --: | --- |
+|   0 |   0 | z00 |
+|   0 |   1 | z01 |
+|   0 |   2 | z02 |
+|   1 |   0 | z10 |
+|   1 |   1 | z11 |
+|   1 |   2 | z12 |
+```
+
+bisecting it with
+
+    bisect "z"
+        (\z ->
+            ( String.left 2 z
+            , String.left 1 z ++ String.right 1 z
+            )
+        )
+        ( "zr", "zc" )
+
+produces the table
+
+```markdown
+| row | col | zr | zc |
+| --: | --: | -- | -- |
+|   0 |   0 | z0 | z0 |
+|   0 |   1 | z0 | z1 |
+|   0 |   2 | z0 | z2 |
+|   1 |   0 | z1 | z0 |
+|   1 |   1 | z1 | z1 |
+|   1 |   2 | z1 | z2 |
+```
+
+If the column to be bisected is not found, the original table is returned.
+
+-}
+bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
+bisect heading bisector ( newHeading1, newHeading2 ) tbl =
+    case tableColumns tbl |> getColumn heading of
+        Just colValues ->
+            let
+                newCols =
+                    List.map bisector colValues |> List.unzip
+            in
+            tbl
+                |> insertColumn newHeading1 (Tuple.first newCols)
+                |> insertColumn newHeading2 (Tuple.second newCols)
+                |> removeColumn heading
+
+        Nothing ->
+            tbl
 
 
 {-| Create an empty table. Useful if table items are to be added programatically
@@ -319,8 +381,9 @@ fromGridRows =
 
 
 {-| Convenience function for splitting a string into its first (head) and remaining
-(tail) characters. e.g. `headTail "tidy" == ("t","idy")`. Useful when using [bisect](#bisect)
-to split column values into one column of heads and another of tails.
+(tail) characters. e.g. `headTail "tidy" == ("t","idy")`. Equivalent to `splitAt 1`.
+Useful when using [bisect](#bisect) to split column values into one column of heads
+and another of tails.
 -}
 headTail : String -> ( String, String )
 headTail str =
@@ -548,6 +611,28 @@ mapColumn heading fn tbl =
 
         Nothing ->
             tbl
+
+
+{-| Convenience function for splitting a string (second parameter) at the given
+position (first parameter).
+
+    splitAt 4 "tidyString" == ( "tidy", "String" )
+
+If the first parameter is negative, the position is counted from the right rather
+than left.
+
+    splitAt -4 "temperature2019" == ( "temperature", "2019" )
+
+Useful when using [bisect](#bisect) to split column values in two.
+
+-}
+splitAt : Int -> String -> ( String, String )
+splitAt n s =
+    if n < 0 then
+        ( String.left (String.length s + n) s, String.dropLeft (String.length s + n) s )
+
+    else
+        ( String.left n s, String.dropLeft n s )
 
 
 {-| Extract the values of the column with the given name (first parameter) from a
@@ -1029,66 +1114,6 @@ spread columnName valueName tbl =
                     |> List.foldl insertRow empty
         in
         List.foldl (\( nc, nvals ) t -> insertColumn nc nvals t) newTable newColumns
-
-
-{-| Split a named column (first parameter) into two with a bisecting function
-(second parameter). The third parameter should be the names to give the two new
-columns, which are inserted into the table replacing the original bisected column.
-
-For example, given a table
-
-```markdown
-| row | col |   z |
-| --: | --: | --- |
-|   0 |   0 | z00 |
-|   0 |   1 | z01 |
-|   0 |   2 | z02 |
-|   1 |   0 | z10 |
-|   1 |   1 | z11 |
-|   1 |   2 | z12 |
-```
-
-bisecting it with
-
-    bisect "z"
-        (\z ->
-            ( String.left 2 z
-            , String.left 1 z ++ String.right 1 z
-            )
-        )
-        ( "zr", "zc" )
-
-produces the table
-
-```markdown
-| row | col | zr | zc |
-| --: | --: | -- | -- |
-|   0 |   0 | z0 | z0 |
-|   0 |   1 | z0 | z1 |
-|   0 |   2 | z0 | z2 |
-|   1 |   0 | z1 | z0 |
-|   1 |   1 | z1 | z1 |
-|   1 |   2 | z1 | z2 |
-```
-
-If the column to be bisected is not found, the original table is returned.
-
--}
-bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
-bisect heading bisector ( newHeading1, newHeading2 ) tbl =
-    case tableColumns tbl |> getColumn heading of
-        Just colValues ->
-            let
-                newCols =
-                    List.map bisector colValues |> List.unzip
-            in
-            tbl
-                |> insertColumn newHeading1 (Tuple.first newCols)
-                |> insertColumn newHeading2 (Tuple.second newCols)
-                |> removeColumn heading
-
-        Nothing ->
-            tbl
 
 
 {-| Keep rows in the table where the values in the given column satisfy the given
