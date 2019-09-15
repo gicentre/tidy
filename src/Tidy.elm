@@ -1443,9 +1443,178 @@ type alias Heading =
     ( Int, String )
 
 
+
+{- JsVal allows every JSON type to be represented. See
+   <https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure>
+-}
+
+
+type JsVal
+    = JsString String
+    | JsInt Int
+    | JsFloat Float
+    | JsArray (List JsVal)
+    | JsObject (Dict String JsVal)
+    | JsNull
+
+
+
+{- Provides the first row of values for each column in the table. -}
+
+
+columnsHead : Columns -> List ( Heading, Cell )
+columnsHead columns =
+    if (columns |> Dict.values |> List.head |> Maybe.withDefault []) == [] then
+        []
+
+    else
+        Dict.foldl (\k v -> (::) ( k, List.head v |> Maybe.withDefault "" )) [] columns
+
+
+
+{- Finds the column index number of the column with the given name, if it exists -}
+
+
+columnIndex : String -> Columns -> Maybe Int
+columnIndex colName =
+    Dict.keys
+        >> List.filter (\( _, heading ) -> heading == colName)
+        >> List.head
+        >> Maybe.map Tuple.first
+
+
+columnsTail : Columns -> Columns
+columnsTail =
+    Dict.map (always (List.drop 1))
+
+
+
+{- Re-compute column indices from 0 to (numCols-1) while preserving current order. -}
+
+
+compactIndices : Int -> Columns -> Columns
+compactIndices startIndex =
+    Dict.foldl
+        (\( _, colHeading ) v acc -> Dict.insert ( startIndex + Dict.size acc, colHeading ) v acc)
+        Dict.empty
+
+
 flip : (a -> b -> c) -> b -> a -> c
 flip fn argB argA =
     fn argA argB
+
+
+
+{- Like Dict.get but ignores the ordering index in the key tuple. -}
+
+
+getColumn : String -> Columns -> Maybe (List String)
+getColumn colName =
+    Dict.foldl
+        (\( _, s ) v acc ->
+            case acc of
+                Just _ ->
+                    acc
+
+                Nothing ->
+                    if s == colName then
+                        Just v
+
+                    else
+                        Nothing
+        )
+        Nothing
+
+
+
+{- Private version of insertColumn that allows a column index to be defined.
+   Normally new columns are inserted at the end of existing ones (by inserting at
+   Dict.size) but if we need to insert before others, we can provide a negative
+   index for example.
+-}
+
+
+insertColumnAt : Int -> String -> List String -> Columns -> Columns
+insertColumnAt index heading colValues columns =
+    let
+        colSize =
+            if columns == Dict.empty then
+                List.length colValues
+
+            else
+                columns |> Dict.values |> List.head |> Maybe.withDefault [] |> List.length
+
+        extraRows =
+            List.repeat (List.length colValues - colSize) ""
+
+        insertIndex =
+            case columnIndex heading columns of
+                Just i ->
+                    i
+
+                Nothing ->
+                    index
+    in
+    columns
+        |> Dict.insert ( insertIndex, String.trim heading ) (List.take colSize (colValues ++ extraRows))
+
+
+
+{- Decodes a JSON type and stores it as one of the JsVal types. Note that this single
+   type can be an array or object which can contain nested types within. See
+   https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure
+-}
+
+
+jsValDecoder : Json.Decode.Decoder JsVal
+jsValDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.map JsString Json.Decode.string
+        , Json.Decode.map JsInt Json.Decode.int
+        , Json.Decode.map JsFloat Json.Decode.float
+        , Json.Decode.list (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsArray
+        , Json.Decode.dict (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsObject
+        , Json.Decode.null JsNull
+        ]
+
+
+
+{- Like Dict.member but ignores the ordering index in the key tuple. -}
+
+
+memberColumns : String -> Columns -> Bool
+memberColumns colName =
+    Dict.keys >> List.map Tuple.second >> List.member colName
+
+
+numRows : Table -> Int
+numRows =
+    tableColumns
+        >> Dict.values
+        >> List.head
+        >> Maybe.withDefault []
+        >> List.length
+
+
+
+{- Like Dict.remove but ignores the ordering index in the key tuple. -}
+
+
+remove : String -> Columns -> Columns
+remove colName =
+    Dict.filter (\( _, s ) _ -> s /= colName)
+
+
+tableColumns : Table -> Columns
+tableColumns tbl =
+    case tbl of
+        Table cols ->
+            .columns cols
+
+
+toTable : Columns -> Table
+toTable cols =
+    Table { columns = cols }
 
 
 transpose : List (List a) -> List (List a)
@@ -1493,169 +1662,3 @@ unique list =
 zip : List a -> List b -> List ( a, b )
 zip =
     List.map2 Tuple.pair
-
-
-
-{- Provides the first row of values for each column in the table. -}
-
-
-columnsHead : Columns -> List ( Heading, Cell )
-columnsHead columns =
-    if (columns |> Dict.values |> List.head |> Maybe.withDefault []) == [] then
-        []
-
-    else
-        Dict.foldl (\k v -> (::) ( k, List.head v |> Maybe.withDefault "" )) [] columns
-
-
-
-{- Like Dict.get but ignores the ordering index in the key tuple. -}
-
-
-getColumn : String -> Columns -> Maybe (List String)
-getColumn colName =
-    Dict.foldl
-        (\( _, s ) v acc ->
-            case acc of
-                Just _ ->
-                    acc
-
-                Nothing ->
-                    if s == colName then
-                        Just v
-
-                    else
-                        Nothing
-        )
-        Nothing
-
-
-
-{- Like Dict.member but ignores the ordering index in the key tuple. -}
-
-
-memberColumns : String -> Columns -> Bool
-memberColumns colName =
-    Dict.keys >> List.map Tuple.second >> List.member colName
-
-
-
-{- Like Dict.remove but ignores the ordering index in the key tuple. -}
-
-
-remove : String -> Columns -> Columns
-remove colName =
-    Dict.filter (\( _, s ) _ -> s /= colName)
-
-
-
-{- Finds the column index number of the column with the given name, if it exists -}
-
-
-columnIndex : String -> Columns -> Maybe Int
-columnIndex colName =
-    Dict.keys
-        >> List.filter (\( _, heading ) -> heading == colName)
-        >> List.head
-        >> Maybe.map Tuple.first
-
-
-{-| Private version of insertColumn that allows a column index to be defined.
-Normally new columns are inserted at the end of existing ones (by inserting at
-Dict.size) but if we need to insert before others, we can provide a negative
-index for example.
--}
-insertColumnAt : Int -> String -> List String -> Columns -> Columns
-insertColumnAt index heading colValues columns =
-    let
-        colSize =
-            if columns == Dict.empty then
-                List.length colValues
-
-            else
-                columns |> Dict.values |> List.head |> Maybe.withDefault [] |> List.length
-
-        extraRows =
-            List.repeat (List.length colValues - colSize) ""
-
-        insertIndex =
-            case columnIndex heading columns of
-                Just i ->
-                    i
-
-                Nothing ->
-                    index
-    in
-    columns
-        |> Dict.insert ( insertIndex, String.trim heading ) (List.take colSize (colValues ++ extraRows))
-
-
-
-{- Re-compute column indices from 0 to (numCols-1) while preserving current order. -}
-
-
-compactIndices : Int -> Columns -> Columns
-compactIndices startIndex =
-    Dict.foldl
-        (\( _, colHeading ) v acc -> Dict.insert ( startIndex + Dict.size acc, colHeading ) v acc)
-        Dict.empty
-
-
-columnsTail : Columns -> Columns
-columnsTail =
-    Dict.map (always (List.drop 1))
-
-
-numRows : Table -> Int
-numRows =
-    tableColumns
-        >> Dict.values
-        >> List.head
-        >> Maybe.withDefault []
-        >> List.length
-
-
-toTable : Columns -> Table
-toTable cols =
-    Table { columns = cols }
-
-
-tableColumns : Table -> Columns
-tableColumns tbl =
-    case tbl of
-        Table cols ->
-            .columns cols
-
-
-
-{- JsVal allows every JSON type to be represented. See
-   <https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure>
--}
-
-
-type JsVal
-    = JsString String
-    | JsInt Int
-    | JsFloat Float
-    | JsArray (List JsVal)
-    | JsObject (Dict String JsVal)
-    | JsNull
-
-
-
-{- Decodes a JSON type and stores it as one of the JsVal types. Note that this single
-   type can be an array or object which can contain nested types within. See
-   https://stackoverflow.com/questions/40825493/elm-decoding-unknown-json-structure
--}
-
-
-jsValDecoder : Json.Decode.Decoder JsVal
-jsValDecoder =
-    Json.Decode.oneOf
-        [ Json.Decode.map JsString Json.Decode.string
-        , Json.Decode.map JsInt Json.Decode.int
-        , Json.Decode.map JsFloat Json.Decode.float
-        , Json.Decode.list (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsArray
-        , Json.Decode.dict (Json.Decode.lazy (\_ -> jsValDecoder)) |> Json.Decode.map JsObject
-        , Json.Decode.null JsNull
-        ]
