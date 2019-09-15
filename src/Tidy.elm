@@ -27,6 +27,7 @@ module Tidy exposing
     , leftDiff
     , rightDiff
     , tableSummary
+    , columnNames
     , toCSV
     , toDelimited
     , numColumn
@@ -130,6 +131,7 @@ table2:
 # Output
 
 @docs tableSummary
+@docs columnNames
 @docs toCSV
 @docs toDelimited
 
@@ -220,12 +222,110 @@ bisect heading bisector ( newHeading1, newHeading2 ) tbl =
             tbl
 
 
+{-| Extract Boolean values of a given column from a table. Assumes that `True`
+values can be represented by the case-insensitive strings `true`, `yes` and `1`
+while all other values are assumed to be false.
+
+    dataColumn =
+        myTable |> booColumn "isMarried"
+
+-}
+booColumn : String -> Table -> List Bool
+booColumn heading =
+    let
+        toBool str =
+            case str |> String.trim |> String.toLower of
+                "true" ->
+                    True
+
+                "yes" ->
+                    True
+
+                "1" ->
+                    True
+
+                _ ->
+                    False
+    in
+    toColumn heading toBool
+
+
+{-| Provide a list of column names for the given table.
+-}
+columnNames : Table -> List String
+columnNames =
+    tableColumns >> Dict.keys >> List.map Tuple.second
+
+
 {-| Create an empty table. Useful if table items are to be added programatically
 with `insertRow` and `insertColumn`.
 -}
 empty : Table
 empty =
     toTable Dict.empty
+
+
+{-| Keep columns in the table whose names satisfy the given test. The test should
+be a function that takes a column heading and returns either `True` or `False`
+depending on whether the column should be retained.
+
+    newTable =
+        myTable
+            |> filterColumns (\s -> String.left 11 s == "temperature")
+
+-}
+filterColumns : (String -> Bool) -> Table -> Table
+filterColumns fn =
+    tableColumns
+        >> Dict.filter (\( _, colHeading ) _ -> fn colHeading)
+        >> compactIndices 0
+        >> toTable
+
+
+{-| Keep rows in the table where the values in the given column satisfy the given
+test. The test should be a function that takes a cell value and returns either
+`True` or `False` depending on whether the row containing that value in the column
+should be retained.
+
+    isWarm : String -> Bool
+    isWarm s =
+        case String.toFloat s of
+            Just x ->
+                x >= 10
+
+            Nothing ->
+                False
+
+    warmCities =
+        myTable |> filterRows "temperature" isWarm
+
+-}
+filterRows : String -> (String -> Bool) -> Table -> Table
+filterRows columnName fn tbl =
+    let
+        predicate n val =
+            if fn val then
+                n
+
+            else
+                -1
+
+        colValues =
+            case getColumn columnName (tableColumns tbl) of
+                Nothing ->
+                    []
+
+                Just values ->
+                    List.indexedMap predicate values
+                        |> List.filter (\n -> n /= -1)
+
+        filterFromCol key val =
+            val
+                |> List.indexedMap Tuple.pair
+                |> List.filter (\( n, _ ) -> List.member n colValues)
+                |> List.map Tuple.second
+    in
+    tbl |> tableColumns |> Dict.map filterFromCol |> toTable
 
 
 {-| Create a table from a multi-line comma-separated string. For example
@@ -380,497 +480,6 @@ fromGridRows =
         >> toTable
 
 
-{-| Convenience function for splitting a string into its first (head) and remaining
-(tail) characters. e.g. `headTail "tidy" == ("t","idy")`. Equivalent to `splitAt 1`.
-Useful when using [bisect](#bisect) to split column values into one column of heads
-and another of tails.
--}
-headTail : String -> ( String, String )
-headTail str =
-    ( String.left 1 str, String.dropLeft 1 str )
-
-
-{-| Add a row of values to a table. The new values are represented by a list of
-`(columnName,columnValue)` tuples. If the table being appended is not empty, the
-column names should correspond to existing columns in the table or they will be
-ignored. Any unspecified columns will have an empty string value inserted.
--}
-insertRow : List ( String, String ) -> Table -> Table
-insertRow namedCells tbl =
-    if tableColumns tbl == Dict.empty then
-        namedCells
-            |> List.indexedMap (\n ( colHead, cell ) -> ( ( n, colHead ), [ cell ] ))
-            |> Dict.fromList
-            |> toTable
-
-    else
-        -- To guarantee we don't misalign columns, we always add a complete set of
-        -- column values, even if they are not all provided as parameters.
-        let
-            newValues =
-                Dict.fromList namedCells
-
-            newCell colHead =
-                Dict.get colHead newValues |> Maybe.withDefault ""
-        in
-        tbl
-            |> tableColumns
-            |> Dict.map (\( _, colHead ) colValues -> colValues ++ [ newCell colHead ])
-            |> toTable
-
-
-{-| Rename the given column (first parameter) with a new name (second parameter).
-If the new column name matches an existing one, the existing one will be replaced
-by the renamed column.
--}
-renameColumn : String -> String -> Table -> Table
-renameColumn oldName newName =
-    tableColumns
-        >> Dict.foldl
-            (\( n, colName ) ->
-                if colName == oldName then
-                    Dict.insert ( n, newName )
-
-                else
-                    Dict.insert ( n, colName )
-            )
-            Dict.empty
-        >> toTable
-
-
-{-| Add a column of data to a table. The first parameter is the name to give the
-column. The second is a list of column values. If the table already has a column
-with this name, it will get replaced with the given data. To ensure table rows are
-always aligned, if the table is not empty, the column values are padded / truncated
-to match the number of rows in the table.
--}
-insertColumn : String -> List String -> Table -> Table
-insertColumn heading colValues tbl =
-    insertColumnAt (Dict.size (tableColumns tbl)) heading colValues (tableColumns tbl)
-        -- Need to compact indices in case the additional column replaces existing one.
-        |> compactIndices 0
-        |> toTable
-
-
-{-| Add a column of data extracted from a JSON string onto a table. The first parameter
-is the name of the JSON object containing the data values to add. This will become
-the name of the column in the table. The second is a list of JSON object names that
-define the path to the column object. This can be an empty list is the object is
-in an array at the root of the JSON. The third parameter is the JSON string to parse
-and the fourth the table to which a new column will be added. If there is a problem
-finding the column object, the original table is returned.
-
-For example,
-
-    json =
-        """[
-      { "person": "John Smith", "treatment": "b", "result": 2 },
-      { "person": "Jane Doe", "treatment": "a", "result": 16 },
-      { "person": "Jane Doe", "treatment": "b", "result": 11 },
-      { "person": "Mary Johnson", "treatment": "a", "result": 3 },
-      { "person": "Mary Johnson", "treatment": "b", "result": 1 }
-    ]"""
-
-    table =
-        empty
-            |> insertColumnFromJson "person" [] json
-            |> insertColumnFromJson "treatment" [] json
-            |> insertColumnFromJson "result" [] json
-
-would generate a table
-
-```markdown
-| person       | treatment | result |
-| ------------ | --------- | -----: |
-| John Smith   | b         |      2 |
-| Jane Doe     | a         |     16 |
-| Jane Doe     | b         |     11 |
-| Mary Johnson | a         |      3 |
-| Mary Johnson | b         |      1 |
-```
-
--}
-insertColumnFromJson : String -> List String -> String -> Table -> Table
-insertColumnFromJson key path json =
-    let
-        extract keys jsVal values =
-            case keys of
-                hd :: tl ->
-                    case jsVal of
-                        JsArray list ->
-                            List.foldl (extract keys) [] list ++ values
-
-                        -- We need to match the current key with an object name
-                        JsObject object ->
-                            case Dict.get hd object of
-                                Just matchedJsVal ->
-                                    extract tl matchedJsVal values
-
-                                Nothing ->
-                                    []
-
-                        _ ->
-                            []
-
-                [] ->
-                    case jsVal of
-                        JsInt num ->
-                            String.fromInt num :: values
-
-                        JsFloat num ->
-                            String.fromFloat num :: values
-
-                        JsString s ->
-                            s :: values
-
-                        _ ->
-                            values
-    in
-    case Json.Decode.decodeString jsValDecoder json of
-        Ok jsVal ->
-            insertColumn key
-                (extract (path ++ [ key ]) jsVal []
-                    |> List.reverse
-                )
-
-        Err msg ->
-            identity
-
-
-{-| Add an index column to a table. The first parameter is the name to give the
-new column containing index values. The second is a prefix to add to each index
-value, useful for giving different tables different index values (or use `""` for
-no prefix). If the table already has a column with this name, it will be replaced
-with this index column.
-
-Creating an index column can be useful when joining tables with keys that you wish
-to guarantee are unique for each row. For example, to combine the rows of two
-tables `table1` and `table2`, but which may contain repeated values:
-
-    outerJoin "key"
-        ( insertIndexColumn "key" "t1" table1, "key" )
-        ( insertIndexColumn "key" "t2" table2, "key" )
-
--}
-insertIndexColumn : String -> String -> Table -> Table
-insertIndexColumn heading prefix tbl =
-    let
-        prefixFull =
-            if prefix == "" then
-                ""
-
-            else
-                prefix ++ "_"
-
-        indices =
-            List.range 1 (numRows tbl)
-                |> List.map
-                    (\r ->
-                        prefixFull
-                            ++ String.padLeft
-                                (tbl |> numRows |> String.fromInt |> String.length)
-                                '0'
-                                (String.fromInt r)
-                    )
-    in
-    insertColumnAt -1 heading indices (tableColumns tbl)
-        -- Need to compact indices in case the additional column replaces existing one.
-        |> compactIndices 0
-        |> toTable
-
-
-{-| Remove a column with the given name from a table. If the column is not present
-in the table, the original table is returned.
--}
-removeColumn : String -> Table -> Table
-removeColumn colName =
-    tableColumns >> remove colName >> compactIndices 0 >> toTable
-
-
-{-| Transform the contents of the given column (first parameter) with a mapping
-function (second parameter). For example
-
-    newTable =
-        mapColumn "myColumnHeading" impute myTable
-
-    impute val =
-        if val == "" then
-            "0"
-
-        else
-            val
-
-If the column name is not found, the original table is returned.
-
--}
-mapColumn : String -> (String -> String) -> Table -> Table
-mapColumn heading fn tbl =
-    case tableColumns tbl |> getColumn heading of
-        Just colValues ->
-            tbl |> insertColumn heading (List.map fn colValues)
-
-        Nothing ->
-            tbl
-
-
-{-| Convenience function for splitting a string (second parameter) at the given
-position (first parameter).
-
-    splitAt 4 "tidyString" == ( "tidy", "String" )
-
-If the first parameter is negative, the position is counted from the right rather
-than left.
-
-    splitAt -4 "temperature2019" == ( "temperature", "2019" )
-
-Useful when using [bisect](#bisect) to split column values in two.
-
--}
-splitAt : Int -> String -> ( String, String )
-splitAt n s =
-    if n < 0 then
-        ( String.left (String.length s + n) s, String.dropLeft (String.length s + n) s )
-
-    else
-        ( String.left n s, String.dropLeft n s )
-
-
-{-| Extract the values of the column with the given name (first parameter) from a
-table. The type of values in the column is determined by the given cell conversion
-function. The converter function should handle cases of missing data in the table
-(e.g. empty strings) as well as failed conversions (e.g. attempts to convert text
-into a number).
-
-    imputeMissing : String -> Int
-    imputeMissing =
-        String.toFloat >> Maybe.withDefault 0
-
-    dataColumn =
-        myTable |> toColumn "count" imputeMissing
-
--}
-toColumn : String -> (String -> a) -> Table -> List a
-toColumn heading converter =
-    tableColumns
-        >> getColumn heading
-        >> Maybe.withDefault []
-        >> List.map converter
-
-
-{-| Extract the numeric values of a given column from a table. Any conversions
-that fail, including missing values in the table are converted into zeros. If
-you wish to handle missing data / failed conversions in a different way, use
-[toColumn](#toColumn) instead, providing a custom converter function.
-
-    dataColumn =
-        myTable |> numColumn "year"
-
--}
-numColumn : String -> Table -> List Float
-numColumn heading =
-    toColumn heading (String.toFloat >> Maybe.withDefault 0)
-
-
-{-| Extract the string values of a given column from a table. Missing values in
-the table are represented as empty strings. If you wish to handle missing values
-in a different way, use [toColumn](#toColumn) instead, providing a custom converter
-function.
-
-    dataColumn =
-        myTable |> strColumn "cityName"
-
--}
-strColumn : String -> Table -> List String
-strColumn heading =
-    toColumn heading identity
-
-
-{-| Extract Boolean values of a given column from a table. Assumes that `True`
-values can be represented by the case-insensitive strings `true`, `yes` and `1`
-while all other values are assumed to be false.
-
-    dataColumn =
-        myTable |> booColumn "isMarried"
-
--}
-booColumn : String -> Table -> List Bool
-booColumn heading =
-    let
-        toBool str =
-            case str |> String.trim |> String.toLower of
-                "true" ->
-                    True
-
-                "yes" ->
-                    True
-
-                "1" ->
-                    True
-
-                _ ->
-                    False
-    in
-    toColumn heading toBool
-
-
-{-| Provide a textual description of a table, configurable to show a given number
-of table rows. If the number of rows to show is negative, all rows are output.
-This is designed primarily to generate markdown output, but is interpretable as
-raw text.
--}
-tableSummary : Int -> Table -> List String
-tableSummary maxRows tbl =
-    let
-        mx =
-            if maxRows < 0 then
-                numTableRows
-
-            else
-                maxRows
-
-        addDividers =
-            List.map (\s -> s ++ " |") >> (::) "|"
-
-        headings =
-            --tbl |> tableColumns |> Dict.keys |> List.map (\( n, s ) -> String.fromInt n ++ "," ++ s) |> addDividers
-            tbl |> tableColumns |> Dict.keys |> List.map Tuple.second |> addDividers
-
-        divider =
-            tbl |> tableColumns |> Dict.keys |> List.map (always "-") |> addDividers
-
-        values =
-            tbl
-                |> tableColumns
-                |> Dict.values
-                |> List.map (List.take mx)
-                |> transpose
-                |> List.map (\ss -> addDividers ss ++ [ "\n" ])
-                |> List.concat
-
-        numTableRows =
-            numRows tbl
-
-        continues =
-            if numTableRows > mx then
-                tbl |> tableColumns |> Dict.keys |> List.map (always " : ") |> addDividers
-
-            else
-                []
-
-        dimensions =
-            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size (tableColumns tbl)), " columns in total." ]
-    in
-    [ headings, [ "\n" ], divider, [ "\n" ], values, continues, dimensions ]
-        |> List.concat
-
-
-{-| Provide a CSV (comma-separated values) format version of a table. Can be useful
-for applications that need to save a table as a file.
--}
-toCSV : Table -> String
-toCSV =
-    toDelimited ","
-
-
-{-| Provide text containing table values separated by the given delimiter (first parameter).
-Can be useful for applications that need to save a table as a file. For example,
-to create tab-delimited (TSV) text representing a table for later saving as a file:
-
-    toDelimited '\t' myTable
-
--}
-toDelimited : String -> Table -> String
-toDelimited delimiter tbl =
-    let
-        headings =
-            tbl
-                |> tableColumns
-                |> Dict.keys
-                |> List.map Tuple.second
-                |> List.intersperse delimiter
-                |> String.concat
-
-        values =
-            tbl
-                |> tableColumns
-                |> Dict.values
-                |> transpose
-                |> List.map (\ss -> List.intersperse delimiter ss ++ [ "\n" ])
-                |> List.concat
-                |> String.concat
-    in
-    headings ++ "\n" ++ values
-
-
-{-| Transpose the rows and columns of a table. Provide the name of column that will
-generate the column headings in the transposed table as the first parameter and the
-name you wish to give the new row names as the second.
-
-For example,
-
-    newTable =
-        myTable |> transposeTable "location" "temperature"
-
-where `myTable` stores:
-
-```markdown
-| location  | temperature2017 | temperature2018 |
-| --------- | --------------: | --------------: |
-| Bristol   |              12 |              14 |
-| Sheffield |              11 |              13 |
-| Glasgow   |               8 |               9 |
-```
-
-creates the following table:
-
-```markdown
-| temperature     | Bristol | Sheffield | Glasgow |
-| --------------- | ------: | --------: | ------: |
-| temperature2017 |      12 |        11 |       8 |
-| temperature2018 |      14 |        13 |       9 |
-```
-
-If the column to contain new headings cannot be found, an empty table is generated.
-If there are repeated names in the new headings column, earlier rows are replaced
-with later repeated ones.
-
--}
-transposeTable : String -> String -> Table -> Table
-transposeTable headingColumn rowName tbl =
-    let
-        colToList heading columns =
-            heading :: (Dict.get heading columns |> Maybe.withDefault [])
-    in
-    case getColumn headingColumn (tableColumns tbl) of
-        Just newHeadings ->
-            let
-                body =
-                    remove headingColumn (tableColumns tbl)
-
-                trBody =
-                    (rowName :: newHeadings)
-                        :: (body
-                                |> Dict.keys
-                                |> List.map (\( _, k ) -> k :: (getColumn k body |> Maybe.withDefault []))
-                           )
-                        |> transpose
-            in
-            List.foldl
-                (\cells t ->
-                    case cells of
-                        hd :: tl ->
-                            insertColumn hd tl t
-
-                        _ ->
-                            t
-                )
-                empty
-                trBody
-
-        Nothing ->
-            empty
-
-
 {-| Combine several columns that represent the same variable into two columns, one
 referencing the original column, the other the values of the variable. For example,
 the following messy table
@@ -1020,6 +629,501 @@ gather columnName valueName colVars table =
         gatheredTable
 
 
+{-| Convenience function for splitting a string into its first (head) and remaining
+(tail) characters. e.g. `headTail "tidy" == ("t","idy")`. Equivalent to `splitAt 1`.
+Useful when using [bisect](#bisect) to split column values into one column of heads
+and another of tails.
+-}
+headTail : String -> ( String, String )
+headTail str =
+    ( String.left 1 str, String.dropLeft 1 str )
+
+
+{-| An _inner join_ will contain only key-matched rows that are present in both
+tables. The first parameter is the name to give the new key-matched column,
+replacing the separate key names in the two tables. Where both tables share a
+common column name, the one in the first table is prioritised.
+
+    innerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key | colA | colB | colC | colD |
+| --- | ---- | ---- | ---- | ---- |
+| k2  | a2   | b2   | c2   | d2   |
+| k4  | a4   | b4   | c4   | d4   |
+```
+
+If one or both of the key columns are not found, this produces an empty table.
+
+-}
+innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
+innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
+    -- Check that the named keys are present in both tables
+    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
+        empty
+
+    else
+        let
+            t1 =
+                oldT1 |> renameColumn key1 keyName
+
+            t2 =
+                oldT2 |> renameColumn key2 keyName
+
+            lJoin =
+                leftJoin ( t1, keyName ) ( t2, keyName )
+
+            t2Keys =
+                getColumn keyName (tableColumns t2) |> Maybe.withDefault []
+        in
+        leftJoin ( t1, keyName ) ( t2, keyName )
+            |> filterRows keyName (\s -> List.member s t2Keys)
+
+
+{-| Add a column of data to a table. The first parameter is the name to give the
+column. The second is a list of column values. If the table already has a column
+with this name, it will get replaced with the given data. To ensure table rows are
+always aligned, if the table is not empty, the column values are padded / truncated
+to match the number of rows in the table.
+-}
+insertColumn : String -> List String -> Table -> Table
+insertColumn heading colValues tbl =
+    insertColumnAt (Dict.size (tableColumns tbl)) heading colValues (tableColumns tbl)
+        -- Need to compact indices in case the additional column replaces existing one.
+        |> compactIndices 0
+        |> toTable
+
+
+{-| Add a column of data extracted from a JSON string onto a table. The first parameter
+is the name of the JSON object containing the data values to add. This will become
+the name of the column in the table. The second is a list of JSON object names that
+define the path to the column object. This can be an empty list if the object is
+in an array at the root of the JSON. The third parameter is the JSON string to parse
+and the fourth the table to which a new column will be added. If there is a problem
+finding the column object, the original table is returned.
+
+For example,
+
+    json =
+        """[
+      { "person": "John Smith", "treatment": "b", "result": 2 },
+      { "person": "Jane Doe", "treatment": "a", "result": 16 },
+      { "person": "Jane Doe", "treatment": "b", "result": 11 },
+      { "person": "Mary Johnson", "treatment": "a", "result": 3 },
+      { "person": "Mary Johnson", "treatment": "b", "result": 1 }
+    ]"""
+
+    table =
+        empty
+            |> insertColumnFromJson "person" [] json
+            |> insertColumnFromJson "treatment" [] json
+            |> insertColumnFromJson "result" [] json
+
+would generate a table
+
+```markdown
+| person       | treatment | result |
+| ------------ | --------- | -----: |
+| John Smith   | b         |      2 |
+| Jane Doe     | a         |     16 |
+| Jane Doe     | b         |     11 |
+| Mary Johnson | a         |      3 |
+| Mary Johnson | b         |      1 |
+```
+
+-}
+insertColumnFromJson : String -> List String -> String -> Table -> Table
+insertColumnFromJson key path json =
+    let
+        extract keys jsVal values =
+            case keys of
+                hd :: tl ->
+                    case jsVal of
+                        JsArray list ->
+                            List.foldl (extract keys) [] list ++ values
+
+                        -- We need to match the current key with an object name
+                        JsObject object ->
+                            case Dict.get hd object of
+                                Just matchedJsVal ->
+                                    extract tl matchedJsVal values
+
+                                Nothing ->
+                                    []
+
+                        _ ->
+                            []
+
+                [] ->
+                    case jsVal of
+                        JsInt num ->
+                            String.fromInt num :: values
+
+                        JsFloat num ->
+                            String.fromFloat num :: values
+
+                        JsString s ->
+                            s :: values
+
+                        _ ->
+                            values
+    in
+    case Json.Decode.decodeString jsValDecoder json of
+        Ok jsVal ->
+            insertColumn key
+                (extract (path ++ [ key ]) jsVal []
+                    |> List.reverse
+                )
+
+        Err msg ->
+            identity
+
+
+{-| Add an index column to a table. The first parameter is the name to give the
+new column containing index values. The second is a prefix to add to each index
+value, useful for giving different tables different index values (or use `""` for
+no prefix). If the table already has a column with this name, it will be replaced
+with this index column.
+
+Creating an index column can be useful when joining tables with keys that you wish
+to guarantee are unique for each row. For example, to combine the rows of two
+tables `table1` and `table2`, but which may contain repeated values:
+
+    outerJoin "key"
+        ( insertIndexColumn "key" "t1" table1, "key" )
+        ( insertIndexColumn "key" "t2" table2, "key" )
+
+-}
+insertIndexColumn : String -> String -> Table -> Table
+insertIndexColumn heading prefix tbl =
+    let
+        prefixFull =
+            if prefix == "" then
+                ""
+
+            else
+                prefix ++ "_"
+
+        indices =
+            List.range 1 (numRows tbl)
+                |> List.map
+                    (\r ->
+                        prefixFull
+                            ++ String.padLeft
+                                (tbl |> numRows |> String.fromInt |> String.length)
+                                '0'
+                                (String.fromInt r)
+                    )
+    in
+    insertColumnAt -1 heading indices (tableColumns tbl)
+        -- Need to compact indices in case the additional column replaces existing one.
+        |> compactIndices 0
+        |> toTable
+
+
+{-| Add a row of values to a table. The new values are represented by a list of
+`(columnName,columnValue)` tuples. If the table being appended is not empty, the
+column names should correspond to existing columns in the table or they will be
+ignored. Any unspecified columns will have an empty string value inserted.
+-}
+insertRow : List ( String, String ) -> Table -> Table
+insertRow namedCells tbl =
+    if tableColumns tbl == Dict.empty then
+        namedCells
+            |> List.indexedMap (\n ( colHead, cell ) -> ( ( n, colHead ), [ cell ] ))
+            |> Dict.fromList
+            |> toTable
+
+    else
+        -- To guarantee we don't misalign columns, we always add a complete set of
+        -- column values, even if they are not all provided as parameters.
+        let
+            newValues =
+                Dict.fromList namedCells
+
+            newCell colHead =
+                Dict.get colHead newValues |> Maybe.withDefault ""
+        in
+        tbl
+            |> tableColumns
+            |> Dict.map (\( _, colHead ) colValues -> colValues ++ [ newCell colHead ])
+            |> toTable
+
+
+{-| Provides a table of all the rows in the first table that do not occur in any
+key-matched rows in the second table.
+
+    leftDiff ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key1 | colA | colB |
+| ---- | ---- | ---- |
+| k1   | a1   | b1   |
+| k3   | a3   | b3   |
+```
+
+If the first key is not found, an empty table is returned, if the second key is
+not found, the first table is returned.
+
+-}
+leftDiff : ( Table, String ) -> ( Table, String ) -> Table
+leftDiff ( t1, key1 ) ( t2, key2 ) =
+    if not <| memberColumns key1 (tableColumns t1) then
+        empty
+
+    else
+        let
+            t2Keys =
+                getColumn key2 (tableColumns t2) |> Maybe.withDefault []
+        in
+        filterRows key1 (\s -> not <| List.member s t2Keys) t1
+
+
+{-| A _left join_ preserves all the values in the first table and adds any key-matched
+values from columns in the second table to it. Where both tables share common column
+names, including key columns, only those in the left (first) table are stored in the output.
+
+    leftJoin ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key1 | colA | colB | Key2 | colC | colD |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| k1   | a1   | b1   |      |      |      |
+| k2   | a2   | b2   | k2   | c2   | d2   |
+| k3   | a3   | b3   |      |      |      |
+| k4   | a4   | b4   | k4   | c4   | d4   |
+```
+
+If one or both of the key columns are not found, the left table is returned.
+
+-}
+leftJoin : ( Table, String ) -> ( Table, String ) -> Table
+leftJoin ( t1, key1 ) ( t2, key2 ) =
+    -- Check that the named keys are present in both tables
+    if not <| memberColumns key1 (tableColumns t1) && memberColumns key2 (tableColumns t2) then
+        t1
+
+    else
+        let
+            keyCol colLabel =
+                case ( getColumn key2 (tableColumns t2), getColumn colLabel (tableColumns t2) ) of
+                    ( Just ks, Just vs ) ->
+                        Dict.fromList (List.map2 Tuple.pair ks vs)
+
+                    _ ->
+                        Dict.empty
+
+            tableCol colLabel =
+                List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
+                    (getColumn key1 (tableColumns t1) |> Maybe.withDefault [])
+
+            leftInsert ( n, label2 ) columns =
+                if memberColumns label2 columns then
+                    columns
+
+                else
+                    columns |> Dict.insert ( n, label2 ) (tableCol label2)
+        in
+        List.foldl leftInsert (tableColumns t1) (Dict.keys (tableColumns t2 |> compactIndices (Dict.size (tableColumns t1))))
+            |> compactIndices 0
+            |> toTable
+
+
+{-| Transform the contents of the given column (first parameter) with a mapping
+function (second parameter). For example
+
+    newTable =
+        mapColumn "myColumnHeading" impute myTable
+
+    impute val =
+        if val == "" then
+            "0"
+
+        else
+            val
+
+If the column name is not found, the original table is returned.
+
+-}
+mapColumn : String -> (String -> String) -> Table -> Table
+mapColumn heading fn tbl =
+    case tableColumns tbl |> getColumn heading of
+        Just colValues ->
+            tbl |> insertColumn heading (List.map fn colValues)
+
+        Nothing ->
+            tbl
+
+
+{-| Extract the numeric values of a given column from a table. Any conversions
+that fail, including missing values in the table are converted into zeros. If
+you wish to handle missing data / failed conversions in a different way, use
+[toColumn](#toColumn) instead, providing a custom converter function.
+
+    dataColumn =
+        myTable |> numColumn "year"
+
+-}
+numColumn : String -> Table -> List Float
+numColumn heading =
+    toColumn heading (String.toFloat >> Maybe.withDefault 0)
+
+
+{-| An _outer join_ contains all rows of both joined tables. The first parameter
+is the name to give the new key-matched column, replacing the separate key names
+in the two tables.
+
+    outerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key | colA | colB | colC | colD |
+| --- | ---- | ---- | ---- | ---- |
+| k1  | a1   | b1   |      |      |
+| k2  | a2   | b2   | c2   | d2   |
+| k3  | a3   | b3   |      |      |
+| k4  | a4   | b4   | c4   | d4   |
+| k6  |      |      | c6   | d6   |
+| k8  |      |      | c8   | d8   |
+```
+
+If one or both of the key columns are not found, this produces an empty table.
+
+-}
+outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
+outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
+    -- TODO: What to do when tables have some common column names?
+    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
+        empty
+
+    else
+        let
+            t1 =
+                oldT1 |> renameColumn key1 keyName
+
+            t2 =
+                oldT2 |> renameColumn key2 keyName
+
+            leftColumns =
+                leftJoin ( t1, keyName ) ( t2, keyName ) |> tableColumns
+
+            rightTable =
+                rightJoin ( t1, keyName ) ( t2, keyName )
+
+            diff =
+                filterRows keyName
+                    (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
+                    rightTable
+        in
+        Dict.map (\( n, k ) v -> v ++ (getColumn k (tableColumns diff) |> Maybe.withDefault [])) leftColumns
+            |> toTable
+
+
+{-| Remove a column with the given name from a table. If the column is not present
+in the table, the original table is returned.
+-}
+removeColumn : String -> Table -> Table
+removeColumn colName =
+    tableColumns >> remove colName >> compactIndices 0 >> toTable
+
+
+{-| Rename the given column (first parameter) with a new name (second parameter).
+If the new column name matches an existing one, the existing one will be replaced
+by the renamed column.
+-}
+renameColumn : String -> String -> Table -> Table
+renameColumn oldName newName =
+    tableColumns
+        >> Dict.foldl
+            (\( n, colName ) ->
+                if colName == oldName then
+                    Dict.insert ( n, newName )
+
+                else
+                    Dict.insert ( n, colName )
+            )
+            Dict.empty
+        >> toTable
+
+
+{-| Provides a table of all the rows in the second table that do not occur in any
+key-matched rows in the first table.
+
+    rightDiff ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key2 | colC | colD |
+| ---- | ---- | ---- |
+| k6   | c6   | d6   |
+| k8   | c8   | d8   |
+```
+
+If the first key is not found, the second table is returned, if the second key is
+not found, an empty table is returned.
+
+-}
+rightDiff : ( Table, String ) -> ( Table, String ) -> Table
+rightDiff =
+    flip leftDiff
+
+
+{-| A _right join_ preserves all the values in the second table and adds any
+key-matched values from columns in the first table to it. Where both tables share
+common column names, including key columns, only those in the right (second) table
+are stored in the output.
+
+    rightJoin ( table1, "Key1" ) ( table2, "Key2" )
+
+would generate
+
+```markdown
+| Key2 | colC | colD | Key1 | colA | colB |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| k2   | c2   | d2   | k2   | a2   | b2   |
+| k4   | c4   | d4   | k4   | a4   | b4   |
+| k6   | c6   | d6   |      |      |      |
+| k8   | c8   | d8   |      |      |      |
+```
+
+If one or both of the key columns are not found, the right table is returned.
+
+-}
+rightJoin : ( Table, String ) -> ( Table, String ) -> Table
+rightJoin =
+    flip leftJoin
+
+
+{-| Convenience function for splitting a string (second parameter) at the given
+position (first parameter).
+
+    splitAt 4 "tidyString" == ( "tidy", "String" )
+
+If the first parameter is negative, the position is counted from the right rather
+than left.
+
+    splitAt -4 "temperature2019" == ( "temperature", "2019" )
+
+Useful when using [bisect](#bisect) to split column values in two.
+
+-}
+splitAt : Int -> String -> ( String, String )
+splitAt n s =
+    if n < 0 then
+        ( String.left (String.length s + n) s, String.dropLeft (String.length s + n) s )
+
+    else
+        ( String.left n s, String.dropLeft n s )
+
+
 {-| The inverse of [gather](#gather), spreading a pair of columns rotates values
 to separate columns (like a _pivot_ in a spreadsheet). This is useful if different
 variables are stored in separate rows of the same column. For example, the following
@@ -1116,293 +1220,198 @@ spread columnName valueName tbl =
         List.foldl (\( nc, nvals ) t -> insertColumn nc nvals t) newTable newColumns
 
 
-{-| Keep rows in the table where the values in the given column satisfy the given
-test. The test should be a function that takes a cell value and returns either
-`True` or `False` depending on whether the row containing that value in the column
-should be retained.
+{-| Extract the string values of a given column from a table. Missing values in
+the table are represented as empty strings. If you wish to handle missing values
+in a different way, use [toColumn](#toColumn) instead, providing a custom converter
+function.
 
-    isWarm : String -> Bool
-    isWarm s =
-        case String.toFloat s of
-            Just x ->
-                x >= 10
-
-            Nothing ->
-                False
-
-    warmCities =
-        myTable |> filterRows "temperature" isWarm
+    dataColumn =
+        myTable |> strColumn "cityName"
 
 -}
-filterRows : String -> (String -> Bool) -> Table -> Table
-filterRows columnName fn tbl =
+strColumn : String -> Table -> List String
+strColumn heading =
+    toColumn heading identity
+
+
+{-| Provide a textual description of a table, configurable to show a given number
+of table rows. If the number of rows to show is negative, all rows are output.
+This is designed primarily to generate markdown output, but is interpretable as
+raw text.
+-}
+tableSummary : Int -> Table -> List String
+tableSummary maxRows tbl =
     let
-        predicate n val =
-            if fn val then
-                n
+        mx =
+            if maxRows < 0 then
+                numTableRows
 
             else
-                -1
+                maxRows
 
-        colValues =
-            case getColumn columnName (tableColumns tbl) of
-                Nothing ->
-                    []
+        addDividers =
+            List.map (\s -> s ++ " |") >> (::) "|"
 
-                Just values ->
-                    List.indexedMap predicate values
-                        |> List.filter (\n -> n /= -1)
+        headings =
+            --tbl |> tableColumns |> Dict.keys |> List.map (\( n, s ) -> String.fromInt n ++ "," ++ s) |> addDividers
+            tbl |> tableColumns |> Dict.keys |> List.map Tuple.second |> addDividers
 
-        filterFromCol key val =
-            val
-                |> List.indexedMap Tuple.pair
-                |> List.filter (\( n, _ ) -> List.member n colValues)
-                |> List.map Tuple.second
+        divider =
+            tbl |> tableColumns |> Dict.keys |> List.map (always "-") |> addDividers
+
+        values =
+            tbl
+                |> tableColumns
+                |> Dict.values
+                |> List.map (List.take mx)
+                |> transpose
+                |> List.map (\ss -> addDividers ss ++ [ "\n" ])
+                |> List.concat
+
+        numTableRows =
+            numRows tbl
+
+        continues =
+            if numTableRows > mx then
+                tbl |> tableColumns |> Dict.keys |> List.map (always " : ") |> addDividers
+
+            else
+                []
+
+        dimensions =
+            [ "\n", String.fromInt numTableRows, " rows and ", String.fromInt (Dict.size (tableColumns tbl)), " columns in total." ]
     in
-    tbl |> tableColumns |> Dict.map filterFromCol |> toTable
+    [ headings, [ "\n" ], divider, [ "\n" ], values, continues, dimensions ]
+        |> List.concat
 
 
-{-| Keep columns in the table whose names satisfy the given test. The test should
-be a function that takes a column heading and returns either `True` or `False`
-depending on whether the column should be retained.
+{-| Extract the values of the column with the given name (first parameter) from a
+table. The type of values in the column is determined by the given cell conversion
+function. The converter function should handle cases of missing data in the table
+(e.g. empty strings) as well as failed conversions (e.g. attempts to convert text
+into a number).
+
+    imputeMissing : String -> Int
+    imputeMissing =
+        String.toFloat >> Maybe.withDefault 0
+
+    dataColumn =
+        myTable |> toColumn "count" imputeMissing
+
+-}
+toColumn : String -> (String -> a) -> Table -> List a
+toColumn heading converter =
+    tableColumns
+        >> getColumn heading
+        >> Maybe.withDefault []
+        >> List.map converter
+
+
+{-| Provide a CSV (comma-separated values) format version of a table. Can be useful
+for applications that need to save a table as a file.
+-}
+toCSV : Table -> String
+toCSV =
+    toDelimited ","
+
+
+{-| Provide text containing table values separated by the given delimiter (first parameter).
+Can be useful for applications that need to save a table as a file. For example,
+to create tab-delimited (TSV) text representing a table for later saving as a file:
+
+    toDelimited '\t' myTable
+
+-}
+toDelimited : String -> Table -> String
+toDelimited delimiter tbl =
+    let
+        headings =
+            tbl
+                |> tableColumns
+                |> Dict.keys
+                |> List.map Tuple.second
+                |> List.intersperse delimiter
+                |> String.concat
+
+        values =
+            tbl
+                |> tableColumns
+                |> Dict.values
+                |> transpose
+                |> List.map (\ss -> List.intersperse delimiter ss ++ [ "\n" ])
+                |> List.concat
+                |> String.concat
+    in
+    headings ++ "\n" ++ values
+
+
+{-| Transpose the rows and columns of a table. Provide the name of column that will
+generate the column headings in the transposed table as the first parameter and the
+name you wish to give the new row names as the second.
+
+For example,
 
     newTable =
-        myTable
-            |> filterColumns (\s -> String.left 11 s == "temperature")
+        myTable |> transposeTable "location" "temperature"
 
--}
-filterColumns : (String -> Bool) -> Table -> Table
-filterColumns fn =
-    tableColumns
-        >> Dict.filter (\( _, colHeading ) _ -> fn colHeading)
-        >> compactIndices 0
-        >> toTable
-
-
-{-| A _left join_ preserves all the values in the first table and adds any key-matched
-values from columns in the second table to it. Where both tables share common column
-names, including key columns, only those in the left (first) table are stored in the output.
-
-    leftJoin ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
+where `myTable` stores:
 
 ```markdown
-| Key1 | colA | colB | Key2 | colC | colD |
-| ---- | ---- | ---- | ---- | ---- | ---- |
-| k1   | a1   | b1   |      |      |      |
-| k2   | a2   | b2   | k2   | c2   | d2   |
-| k3   | a3   | b3   |      |      |      |
-| k4   | a4   | b4   | k4   | c4   | d4   |
+| location  | temperature2017 | temperature2018 |
+| --------- | --------------: | --------------: |
+| Bristol   |              12 |              14 |
+| Sheffield |              11 |              13 |
+| Glasgow   |               8 |               9 |
 ```
 
-If one or both of the key columns are not found, the left table is returned.
-
--}
-leftJoin : ( Table, String ) -> ( Table, String ) -> Table
-leftJoin ( t1, key1 ) ( t2, key2 ) =
-    -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (tableColumns t1) && memberColumns key2 (tableColumns t2) then
-        t1
-
-    else
-        let
-            keyCol colLabel =
-                case ( getColumn key2 (tableColumns t2), getColumn colLabel (tableColumns t2) ) of
-                    ( Just ks, Just vs ) ->
-                        Dict.fromList (List.map2 Tuple.pair ks vs)
-
-                    _ ->
-                        Dict.empty
-
-            tableCol colLabel =
-                List.map (\colHead -> Dict.get colHead (keyCol colLabel) |> Maybe.withDefault "")
-                    (getColumn key1 (tableColumns t1) |> Maybe.withDefault [])
-
-            leftInsert ( n, label2 ) columns =
-                if memberColumns label2 columns then
-                    columns
-
-                else
-                    columns |> Dict.insert ( n, label2 ) (tableCol label2)
-        in
-        List.foldl leftInsert (tableColumns t1) (Dict.keys (tableColumns t2 |> compactIndices (Dict.size (tableColumns t1))))
-            |> compactIndices 0
-            |> toTable
-
-
-{-| A _right join_ preserves all the values in the second table and adds any
-key-matched values from columns in the first table to it. Where both tables share
-common column names, including key columns, only those in the right (second) table
-are stored in the output.
-
-    rightJoin ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
+creates the following table:
 
 ```markdown
-| Key2 | colC | colD | Key1 | colA | colB |
-| ---- | ---- | ---- | ---- | ---- | ---- |
-| k2   | c2   | d2   | k2   | a2   | b2   |
-| k4   | c4   | d4   | k4   | a4   | b4   |
-| k6   | c6   | d6   |      |      |      |
-| k8   | c8   | d8   |      |      |      |
+| temperature     | Bristol | Sheffield | Glasgow |
+| --------------- | ------: | --------: | ------: |
+| temperature2017 |      12 |        11 |       8 |
+| temperature2018 |      14 |        13 |       9 |
 ```
 
-If one or both of the key columns are not found, the right table is returned.
+If the column to contain new headings cannot be found, an empty table is generated.
+If there are repeated names in the new headings column, earlier rows are replaced
+with later repeated ones.
 
 -}
-rightJoin : ( Table, String ) -> ( Table, String ) -> Table
-rightJoin =
-    flip leftJoin
+transposeTable : String -> String -> Table -> Table
+transposeTable headingColumn rowName tbl =
+    let
+        colToList heading columns =
+            heading :: (Dict.get heading columns |> Maybe.withDefault [])
+    in
+    case getColumn headingColumn (tableColumns tbl) of
+        Just newHeadings ->
+            let
+                body =
+                    remove headingColumn (tableColumns tbl)
 
+                trBody =
+                    (rowName :: newHeadings)
+                        :: (body
+                                |> Dict.keys
+                                |> List.map (\( _, k ) -> k :: (getColumn k body |> Maybe.withDefault []))
+                           )
+                        |> transpose
+            in
+            List.foldl
+                (\cells t ->
+                    case cells of
+                        hd :: tl ->
+                            insertColumn hd tl t
 
-{-| An _inner join_ will contain only key-matched rows that are present in both
-tables. The first parameter is the name to give the new key-matched column,
-replacing the separate key names in the two tables. Where both tables share a
-common column name, the one in the first table is prioritised.
+                        _ ->
+                            t
+                )
+                empty
+                trBody
 
-    innerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
-
-```markdown
-| Key | colA | colB | colC | colD |
-| --- | ---- | ---- | ---- | ---- |
-| k2  | a2   | b2   | c2   | d2   |
-| k4  | a4   | b4   | c4   | d4   |
-```
-
-If one or both of the key columns are not found, this produces an empty table.
-
--}
-innerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
-innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
-    -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
-        empty
-
-    else
-        let
-            t1 =
-                oldT1 |> renameColumn key1 keyName
-
-            t2 =
-                oldT2 |> renameColumn key2 keyName
-
-            lJoin =
-                leftJoin ( t1, keyName ) ( t2, keyName )
-
-            t2Keys =
-                getColumn keyName (tableColumns t2) |> Maybe.withDefault []
-        in
-        leftJoin ( t1, keyName ) ( t2, keyName )
-            |> filterRows keyName (\s -> List.member s t2Keys)
-
-
-{-| An _outer join_ contains all rows of both joined tables. The first parameter
-is the name to give the new key-matched column, replacing the separate key names
-in the two tables.
-
-    outerJoin "Key" ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
-
-```markdown
-| Key | colA | colB | colC | colD |
-| --- | ---- | ---- | ---- | ---- |
-| k1  | a1   | b1   |      |      |
-| k2  | a2   | b2   | c2   | d2   |
-| k3  | a3   | b3   |      |      |
-| k4  | a4   | b4   | c4   | d4   |
-| k6  |      |      | c6   | d6   |
-| k8  |      |      | c8   | d8   |
-```
-
-If one or both of the key columns are not found, this produces an empty table.
-
--}
-outerJoin : String -> ( Table, String ) -> ( Table, String ) -> Table
-outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
-    -- TODO: What to do when tables have some common column names?
-    if not <| memberColumns key1 (tableColumns oldT1) && memberColumns key2 (tableColumns oldT2) then
-        empty
-
-    else
-        let
-            t1 =
-                oldT1 |> renameColumn key1 keyName
-
-            t2 =
-                oldT2 |> renameColumn key2 keyName
-
-            leftColumns =
-                leftJoin ( t1, keyName ) ( t2, keyName ) |> tableColumns
-
-            rightTable =
-                rightJoin ( t1, keyName ) ( t2, keyName )
-
-            diff =
-                filterRows keyName
-                    (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
-                    rightTable
-        in
-        Dict.map (\( n, k ) v -> v ++ (getColumn k (tableColumns diff) |> Maybe.withDefault [])) leftColumns
-            |> toTable
-
-
-{-| Provides a table of all the rows in the first table that do not occur in any
-key-matched rows in the second table.
-
-    leftDiff ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
-
-```markdown
-| Key1 | colA | colB |
-| ---- | ---- | ---- |
-| k1   | a1   | b1   |
-| k3   | a3   | b3   |
-```
-
-If the first key is not found, an empty table is returned, if the second key is
-not found, the first table is returned.
-
--}
-leftDiff : ( Table, String ) -> ( Table, String ) -> Table
-leftDiff ( t1, key1 ) ( t2, key2 ) =
-    if not <| memberColumns key1 (tableColumns t1) then
-        empty
-
-    else
-        let
-            t2Keys =
-                getColumn key2 (tableColumns t2) |> Maybe.withDefault []
-        in
-        filterRows key1 (\s -> not <| List.member s t2Keys) t1
-
-
-{-| Provides a table of all the rows in the second table that do not occur in any
-key-matched rows in the first table.
-
-    rightDiff ( table1, "Key1" ) ( table2, "Key2" )
-
-would generate
-
-```markdown
-| Key2 | colC | colD |
-| ---- | ---- | ---- |
-| k6   | c6   | d6   |
-| k8   | c8   | d8   |
-```
-
-If the first key is not found, the second table is returned, if the second key is
-not found, an empty table is returned.
-
--}
-rightDiff : ( Table, String ) -> ( Table, String ) -> Table
-rightDiff =
-    flip leftDiff
+        Nothing ->
+            empty
 
 
 
