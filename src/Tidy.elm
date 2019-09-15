@@ -19,6 +19,7 @@ module Tidy exposing
     , bisect
     , splitAt
     , headTail
+    , disaggregate
     , transposeTable
     , leftJoin
     , rightJoin
@@ -86,6 +87,7 @@ Wickham identifies some common problems with data that are not in tidy format
 @docs bisect
 @docs splitAt
 @docs headTail
+@docs disaggregate
 @docs transposeTable
 
 
@@ -148,6 +150,7 @@ table2:
 import CSVParser
 import Dict exposing (Dict)
 import Json.Decode
+import Regex
 import Set
 
 
@@ -204,6 +207,9 @@ produces the table
 
 If the column to be bisected is not found, the original table is returned.
 
+For more sophisticated disaggregation, such as splitting a column into more than
+two new ones, consider [disaggregate](#disaggregate).
+
 -}
 bisect : String -> (String -> ( String, String )) -> ( String, String ) -> Table -> Table
 bisect heading bisector ( newHeading1, newHeading2 ) tbl =
@@ -255,6 +261,70 @@ booColumn heading =
 columnNames : Table -> List String
 columnNames =
     tableColumns >> Dict.keys >> List.map Tuple.second
+
+
+{-| Disaggregate the values in a given column (first parameter) according to a
+regular expression (second parameter). The names to give to the new disaggregated
+columns are provided in the third parameter. The number of groups returned by the
+regular expression should match the number of new column names. For example,
+to disaggregate `diagnosisCohort` in the following table:
+
+```markdown
+| diagnosisCohort | numCases |
+| --------------- | -------: |
+| new_sp_m014     |       52 |
+| new_sp_m1524    |      228 |
+| new_sp_f014     |       35 |
+| new_sp_f1524    |      180 |
+| new_sn_m014     |        9 |
+| new_sn_m1524    |       97 |
+| new_sn_f014     |       11 |
+| new_sn_f1524    |       64 |
+```
+
+    disaggregate "diagnosisCohort"
+        "new_?(.*)_(.)(.*)"
+        [ "diagnosis", "gender", "age" ]
+
+produces a new table:
+
+```markdown
+| numCases | diagnosis | gender | age  |
+| -------: | --------- | ------ | ---- |
+|       52 |        sp |      m | 014  |
+|      228 |        sp |      m | 1524 |
+|       35 |        sp |      f | 014  |
+|      180 |        sp |      f | 1524 |
+|        9 |        sn |      m | 014  |
+|       97 |        sn |      m | 1524 |
+|       11 |        sn |      f | 014  |
+|       64 |        sn |      f | 1524 |
+```
+
+If the colunn to disaggregate cannot be found, the original table is returned.
+
+-}
+disaggregate : String -> String -> List String -> Table -> Table
+disaggregate heading regex newHeadings tbl =
+    let
+        matchedGroups =
+            Regex.find
+                (Regex.fromString regex |> Maybe.withDefault Regex.never)
+                >> List.concatMap .submatches
+                >> List.filterMap identity
+
+        newCols cells =
+            List.map matchedGroups cells
+                |> transpose
+                |> zip newHeadings
+    in
+    case tableColumns tbl |> getColumn heading of
+        Just colValues ->
+            List.foldl (\( newHead, newCol ) t -> insertColumn newHead newCol t) tbl (newCols colValues)
+                |> removeColumn heading
+
+        Nothing ->
+            tbl
 
 
 {-| Create an empty table. Useful if table items are to be added programatically
@@ -914,7 +984,7 @@ leftJoin ( t1, key1 ) ( t2, key2 ) =
             keyCol colLabel =
                 case ( getColumn key2 (tableColumns t2), getColumn colLabel (tableColumns t2) ) of
                     ( Just ks, Just vs ) ->
-                        Dict.fromList (List.map2 Tuple.pair ks vs)
+                        Dict.fromList (zip ks vs)
 
                     _ ->
                         Dict.empty
