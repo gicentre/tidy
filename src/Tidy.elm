@@ -272,14 +272,14 @@ to disaggregate `diagnosisCohort` in the following table:
 ```markdown
 | diagnosisCohort | numCases |
 | --------------- | -------: |
-| new_sp_m014     |       52 |
-| new_sp_m1524    |      228 |
-| new_sp_f014     |       35 |
-| new_sp_f1524    |      180 |
-| new_sn_m014     |        9 |
-| new_sn_m1524    |       97 |
-| new_sn_f014     |       11 |
-| new_sn_f1524    |       64 |
+| new_sp_m0-14    |       52 |
+| new_sp_m15-24   |      228 |
+| new_sp_f0-14    |       35 |
+| new_sp_f15-24   |      180 |
+| new_sn_m0-14    |        9 |
+| new_sn_m15-24   |       97 |
+| new_sn_f0-14    |       11 |
+| new_sn_f15-24   |       64 |
 ```
 
     disaggregate "diagnosisCohort"
@@ -289,16 +289,16 @@ to disaggregate `diagnosisCohort` in the following table:
 produces a new table:
 
 ```markdown
-| numCases | diagnosis | gender | age  |
-| -------: | --------- | ------ | ---- |
-|       52 |        sp |      m | 014  |
-|      228 |        sp |      m | 1524 |
-|       35 |        sp |      f | 014  |
-|      180 |        sp |      f | 1524 |
-|        9 |        sn |      m | 014  |
-|       97 |        sn |      m | 1524 |
-|       11 |        sn |      f | 014  |
-|       64 |        sn |      f | 1524 |
+| numCases | diagnosis | gender | age   |
+| -------: | --------- | ------ | ----- |
+|       52 |        sp |      m | 0-14  |
+|      228 |        sp |      m | 15-24 |
+|       35 |        sp |      f | 0-14  |
+|      180 |        sp |      f | 15-24 |
+|        9 |        sn |      m | 0-14  |
+|       97 |        sn |      m | 15-24 |
+|       11 |        sn |      f | 0-14  |
+|       64 |        sn |      f | 15-24 |
 ```
 
 If the colunn to disaggregate cannot be found, the original table is returned.
