@@ -372,30 +372,30 @@ should be retained.
 -}
 filterRows : String -> (String -> Bool) -> Table -> Table
 filterRows columnName fn tbl =
-    let
-        predicate n val =
-            if fn val then
-                n
+    case getColumn columnName (tableColumns tbl) of
+        Nothing ->
+            tbl
+
+        Just testColumn ->
+            let
+                keeps =
+                    List.map fn testColumn
+
+                maybeCell b cell =
+                    if b then
+                        Just cell
+
+                    else
+                        Nothing
+            in
+            if List.member False keeps then
+                tbl
+                    |> tableColumns
+                    |> Dict.map (\k -> List.map2 maybeCell keeps >> List.filterMap identity)
+                    |> toTable
 
             else
-                -1
-
-        colValues =
-            case getColumn columnName (tableColumns tbl) of
-                Nothing ->
-                    []
-
-                Just values ->
-                    List.indexedMap predicate values
-                        |> List.filter (\n -> n /= -1)
-
-        filterFromCol key val =
-            val
-                |> List.indexedMap Tuple.pair
-                |> List.filter (\( n, _ ) -> List.member n colValues)
-                |> List.map Tuple.second
-    in
-    tbl |> tableColumns |> Dict.map filterFromCol |> toTable
+                tbl
 
 
 {-| Create a table from a multi-line comma-separated string. For example
@@ -622,81 +622,44 @@ creates the table
 
 -}
 gather : String -> String -> List ( String, String ) -> Table -> Table
-gather columnName valueName colVars table =
+gather typeName valueName colVars table =
     let
-        colToVarLookup : Dict String Cell
-        colToVarLookup =
-            Dict.fromList colVars
+        numGatheredCols =
+            List.length colVars
 
-        numCols =
-            Dict.size (tableColumns table)
+        gatheredColNames =
+            List.map Tuple.first colVars
 
-        emptyColumns : Columns
-        emptyColumns =
+        types =
+            List.map Tuple.second colVars
+
+        ( gatheredCols, ungatheredCols ) =
             table
                 |> tableColumns
-                |> Dict.keys
-                |> List.filter (\( _, s ) -> not (List.member s (List.map Tuple.first colVars)))
-                |> (++) [ ( numCols, columnName ), ( numCols + 1, valueName ) ]
-                |> List.map (\label -> ( label, [] ))
-                |> Dict.fromList
+                |> Dict.partition (\( _, colName ) v -> List.member colName gatheredColNames)
 
-        newRows : Columns -> List (List ( Heading, Cell ))
-        newRows columns =
-            let
-                gatherCol ( ( _, oldHeading ), val ) =
-                    case Dict.get oldHeading colToVarLookup of
-                        Just colRef ->
-                            Just [ ( ( numCols, columnName ), colRef ), ( ( numCols + 1, valueName ), val ) ]
+        valueColumn =
+            List.map
+                (\cName ->
+                    getColumn cName gatheredCols |> Maybe.withDefault []
+                )
+                gatheredColNames
+                |> transpose
+                |> List.concat
 
-                        Nothing ->
-                            Nothing
+        expandNonGatheredCol =
+            List.concatMap (List.repeat numGatheredCols)
 
-                ungatheredCol ( ( n, oldHeading ), val ) =
-                    case Dict.get oldHeading colToVarLookup of
-                        Just colRef ->
-                            Nothing
-
-                        Nothing ->
-                            Just ( ( n, oldHeading ), val )
-
-                ungatheredCols =
-                    columns |> columnsHead |> List.filterMap ungatheredCol
-            in
-            columns
-                |> columnsHead
-                |> List.filterMap gatherCol
-                |> List.map (\x -> x ++ ungatheredCols)
-
-        addToColumn : Heading -> Columns -> Cell -> List Cell
-        addToColumn heading columns val =
-            (Dict.get heading columns |> Maybe.withDefault []) ++ [ val ]
-
-        addGatheredRows : List ( Heading, Cell ) -> Columns -> Columns
-        addGatheredRows row columns =
-            List.foldl (\( heading, val ) -> Dict.insert heading (addToColumn heading columns val)) columns row
-
-        extractRows : ( Columns, Columns ) -> ( Columns, Columns )
-        extractRows ( oldColumns, newColumns ) =
-            case columnsHead oldColumns of
-                [] ->
-                    ( oldColumns, newColumns )
-
-                row ->
-                    extractRows ( columnsTail oldColumns, List.foldr addGatheredRows newColumns (newRows oldColumns) )
-
-        gatheredTable =
-            extractRows ( tableColumns table, emptyColumns )
-                |> Tuple.second
-                |> compactIndices 0
-                |> toTable
-                |> filterRows valueName ((/=) "")
+        typeColumn =
+            List.repeat (numRows table) types |> List.concat
     in
-    if numRows gatheredTable == 0 then
-        empty
-
-    else
-        gatheredTable
+    ungatheredCols
+        |> Dict.map (\_ col -> expandNonGatheredCol col)
+        |> compactIndices 0
+        |> Dict.insert ( Dict.size ungatheredCols, typeName ) typeColumn
+        |> Dict.insert ( Dict.size ungatheredCols + 1, valueName ) valueColumn
+        |> toTable
+        |> filterRows valueName ((/=) "")
 
 
 {-| Convenience function for splitting a string into its first (head) and remaining
