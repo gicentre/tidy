@@ -14,6 +14,7 @@ module Tidy exposing
     , removeColumn
     , mapColumn
     , filterColumns
+    , moveColumnToEnd
     , gather
     , spread
     , bisect
@@ -64,6 +65,7 @@ module Tidy exposing
 @docs removeColumn
 @docs mapColumn
 @docs filterColumns
+@docs moveColumnToEnd
 
 
 # Tidy
@@ -996,6 +998,34 @@ mapColumn heading fn tbl =
 
         Nothing ->
             tbl
+
+
+{-| Move the column with the given name (first parameter) to become the last column
+in the given table (second parameter). While column order has no effect on table
+processing, this can be useful for display purposes. For example when separating
+variavbles that represent observation cateogries from those representing
+observation measurements.
+-}
+moveColumnToEnd : String -> Table -> Table
+moveColumnToEnd colName tbl =
+    let
+        endIndex =
+            tableColumns tbl |> Dict.size
+    in
+    tbl
+        |> tableColumns
+        |> Dict.toList
+        |> List.map
+            (\( ( i, name ), v ) ->
+                if name == colName then
+                    ( ( endIndex + 1, name ), v )
+
+                else
+                    ( ( i, name ), v )
+            )
+        |> Dict.fromList
+        |> compactIndices 0
+        |> toTable
 
 
 {-| Replace some columns with a single _id_ column and store those column values

@@ -203,7 +203,6 @@ gathered10a =
             ([ "m014", "m1524", "m2534", "m3544", "m4554", "m5564", "m65", "mu", "f014", "f1524", "f2534", "f3544", "f4554", "f5564", "f65", "fu" ]
                 |> List.map (\s -> ( s, s ))
             )
-        |> filterRows "cases" ((/=) "")
 
 
 tidy10b : Table
@@ -219,22 +218,10 @@ tidy10b =
             , ( "65", "65+" )
             ]
                 |> Dict.fromList
-
-        tidy =
-            gathered10a
-                |> bisect "column"
-                    (\s ->
-                        ( String.left 1 s
-                        , Dict.get (String.dropLeft 1 s) ageLookup |> Maybe.withDefault "unknown"
-                        )
-                    )
-                    ( "sex", "age" )
-
-        cases =
-            strColumn "cases" tidy
     in
-    -- Not strictly necessary, but we move the 'cases' column to the end for consistency with paper:
-    tidy |> removeColumn "cases" |> insertColumn "cases" cases
+    gathered10a
+        |> disaggregate "type" "([m|f])(.*)" [ "gender", "age" ]
+        |> moveColumnToEnd "cases"
 
 
 messy11 : Table
