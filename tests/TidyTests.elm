@@ -267,6 +267,25 @@ z20,    z21, z22, z23
                 |> Tidy.insertColumn "year" (List.repeat 4 "2018")
                 |> Tidy.insertColumn "minTemp" [ "3", "-2", "-10", "" ]
                 |> Tidy.insertColumn "maxTemp" [ "27", "26", "23", "14" ]
+
+        redundantTable =
+            Tidy.empty
+                |> Tidy.insertColumn "owner" [ "Simone", "Marj", "Arthur", "Craig" ]
+                |> Tidy.insertColumn "animal" [ "cat", "cat", "fish", "dog" ]
+                |> Tidy.insertColumn "name" [ "Tiddles", "Tiddles", "Gulpie", "Rover" ]
+                |> Tidy.insertColumn "age" [ "6", "6", "2", "12" ]
+
+        keyTable =
+            Tidy.empty
+                |> Tidy.insertColumn "id" [ "1", "2", "3" ]
+                |> Tidy.insertColumn "animal" [ "cat", "dog", "fish" ]
+                |> Tidy.insertColumn "name" [ "Tiddles", "Rover", "Gulpie" ]
+                |> Tidy.insertColumn "age" [ "6", "12", "2" ]
+
+        valueTable =
+            Tidy.empty
+                |> Tidy.insertColumn "owner" [ "Simone", "Marj", "Arthur", "Craig" ]
+                |> Tidy.insertColumn "id" [ "1", "1", "3", "2" ]
     in
     describe "Table generation and column output conversion"
         [ describe "fromCSV"
@@ -449,6 +468,32 @@ z20,    z21, z22, z23
             , test "gatherTemperatures" <|
                 \_ ->
                     Tidy.gather "readingType" "temperature" [ ( "minTemp", "minTemp" ), ( "maxTemp", "maxTemp" ) ] spreadTable |> Expect.equal gatherTable
+            ]
+        , describe "normalization"
+            [ test "normaizeRedundant1" <|
+                \_ ->
+                    Tidy.normalize "id" [ "animal", "name", "age" ] redundantTable |> Expect.equal ( keyTable, valueTable )
+            , test "normaizeRedundant2" <|
+                \_ ->
+                    Tidy.normalize "id" [ "name", "animal", "age" ] redundantTable |> Expect.equal ( keyTable, valueTable )
+            , test "normaizeRedundant3" <|
+                \_ ->
+                    Tidy.normalize "id" [ "age", "name", "animal" ] redundantTable |> Expect.equal ( keyTable, valueTable )
+            , test "normaizeRedundantNoKeys" <|
+                \_ ->
+                    Tidy.normalize "id" [] redundantTable |> Expect.equal ( Tidy.empty, redundantTable )
+            , test "normaizeRedundantNoValidKeys" <|
+                \_ ->
+                    Tidy.normalize "id" [ "x", "y", "z" ] redundantTable |> Expect.equal ( Tidy.empty, redundantTable )
+            , test "normaizeAndJoin" <|
+                \_ ->
+                    let
+                        ( kt, vt ) =
+                            Tidy.normalize "id" [ "animal", "name", "age" ] redundantTable
+                    in
+                    Tidy.rightJoin ( kt, "id" ) ( vt, "id" )
+                        |> Tidy.removeColumn "id"
+                        |> Expect.equal redundantTable
             ]
         ]
 
