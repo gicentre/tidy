@@ -167,7 +167,6 @@ tidy8 =
                     , ( "wk6", "6" )
                     , ( "wk7", "7" )
                     ]
-                |> filterRows "rank" ((/=) "")
 
         dateColumn =
             List.map2

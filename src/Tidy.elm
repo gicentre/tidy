@@ -21,6 +21,7 @@ module Tidy exposing
     , headTail
     , disaggregate
     , transposeTable
+    , normalize
     , leftJoin
     , rightJoin
     , innerJoin
@@ -89,6 +90,7 @@ Wickham identifies some common problems with data that are not in tidy format
 @docs headTail
 @docs disaggregate
 @docs transposeTable
+@docs normalize
 
 
 # Join
@@ -266,8 +268,10 @@ columnNames =
 {-| Disaggregate the values in a given column (first parameter) according to a
 regular expression (second parameter). The names to give to the new disaggregated
 columns are provided in the third parameter. The number of groups returned by the
-regular expression should match the number of new column names. For example,
-to disaggregate `diagnosisCohort` in the following table:
+regular expression should match the number of new column names. Performs a similar
+function to _tidyr_'s [extract function](https://tidyr.tidyverse.org/reference/extract.html).
+
+For example, to disaggregate `diagnosisCohort` in the following table:
 
 ```markdown
 | diagnosisCohort | numCases |
@@ -994,6 +998,114 @@ mapColumn heading fn tbl =
             tbl
 
 
+{-| Replace some columns with a single _id_ column and store those column values
+in a separate table. Useful for removing redundancy in a table where multiple rows
+contain several values that describe the same feature. The two resulting tables
+are related with a new _id_ column (named with the first parameter). The names of
+columns forming the key, that are moved into the key table, are provided as the
+second parameter. The function returns a pair of tables in the order (_key table_,
+_value table_).
+
+For example, assuming the following table recording 5 people's favourite film is
+stored as `favFilms` :
+
+```markdown
+| person  | age | film         | release | director  |
+| ------- | --- | ------------ | ------- | --------- |
+| Alice   | 51  | Vertigo      | 1958    | Hitchcock |
+| Brenda  | 60  | Citizen Kane | 1941    | Welles    |
+| Cate    | 23  | Vertigo      | 1958    | Hitchcock |
+| Deborah | 38  | Jaws         | 1985    | Spielberg |
+| Eloise  | 45  | Citizen Kane | 1941    | Welles    |
+```
+
+Normalizing it with
+
+    favFilms
+        |> normalize "id" [ "film", "release", "director" ]
+
+produces a tuple containing the following two tables:
+
+```markdown
+| id | film         | release | director   |
+| -- | ------------ | ------- | ---------- |
+| 1  | Citizen Kane | 1941    | Welles     |
+| 2  | Jaws         | 1975    | Spielberg  |
+| 3  | Vertigo      | 1958    | Hitchcock  |
+```
+
+```markdown
+| person  | age | id |
+| ------- | --- | -- |
+| Alice   | 51  | 3  |
+| Brenda  | 60  | 1  |
+| Cate    | 23  | 3  |
+| Deborah | 38  | 2  |
+| Eloise  | 45  | 1  |
+```
+
+The process of separating a table into two can be reversed by applyiing a table
+join, for example:
+
+    let
+        ( keyTable, valueTable ) =
+            favFilms
+                |> normalize "id" [ "film", "release", "director" ]
+    in
+    leftJoin ( valueTable, "id" ) ( keyTable, "id" )
+        |> removeColumn "id"
+
+-}
+normalize : String -> List String -> Table -> ( Table, Table )
+normalize idName cols tbl =
+    let
+        keyColumns =
+            filterColumns (\c -> List.member c cols) tbl
+
+        keyNames =
+            columnNames keyColumns
+
+        keyRows =
+            keyColumns
+                |> tableColumns
+                |> Dict.values
+                |> transpose
+
+        keyIds =
+            keyRows
+                |> Set.fromList
+                |> Set.toList
+                |> List.indexedMap (\i k -> ( k, i + 1 |> String.fromInt ))
+                |> Dict.fromList
+
+        keyTable =
+            keyIds
+                |> Dict.keys
+                |> transpose
+                |> List.map2 Tuple.pair keyNames
+                |> List.foldl (\( name, vals ) -> insertColumn name vals) empty
+                |> tableColumns
+                |> insertColumnAt -1 idName (Dict.values keyIds)
+                |> compactIndices 0
+                |> toTable
+
+        valueIdColumn =
+            keyRows
+                |> List.map (\k -> Dict.get k keyIds)
+                |> List.filterMap identity
+
+        valueTable =
+            tbl
+                |> filterColumns (\col -> not <| List.member col keyNames)
+                |> insertColumn idName valueIdColumn
+    in
+    if keyNames == [] then
+        ( empty, tbl )
+
+    else
+        ( keyTable, valueTable )
+
+
 {-| Extract the numeric values of a given column from a table. Any conversions
 that fail, including missing values in the table are converted into zeros. If
 you wish to handle missing data / failed conversions in a different way, use
@@ -1530,6 +1642,26 @@ compactIndices startIndex =
     Dict.foldl
         (\( _, colHeading ) v acc -> Dict.insert ( startIndex + Dict.size acc, colHeading ) v acc)
         Dict.empty
+
+
+
+{- Select rows from a table whose values in the given columns (first parameter)
+   are distinct in combination. The resulting table will only consist of the given
+   columns. Useful for normalizing a table with redundant columns that can be
+   replaced with a key id.
+-}
+
+
+filterDistinct : List String -> Table -> Table
+filterDistinct cols tbl =
+    tableColumns tbl
+        |> Dict.filter (\( _, name ) _ -> List.member name cols)
+        |> Dict.values
+        |> transpose
+        |> unique
+        |> transpose
+        |> List.map2 Tuple.pair cols
+        |> List.foldl (\( name, vals ) -> insertColumn name vals) empty
 
 
 flip : (a -> b -> c) -> b -> a -> c
