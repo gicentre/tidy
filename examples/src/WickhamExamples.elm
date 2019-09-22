@@ -55,6 +55,11 @@ view model =
         , h2 [] [ text "Spread table (table 12b)" ]
         , div [] [ text "Then the tmin/tmax temperatures are spread to create the tidy table.:" ]
         , gathered12b |> tableSummary 10 |> toHtml
+        , h2 [] [ text "Normalized table (table 13)" ]
+        , div [] [ text "Normaized Billboard 100 data (from table 8), track observations:" ]
+        , normalized13a |> tableSummary 10 |> toHtml
+        , div [] [ text "and weekly chart observations:" ]
+        , normalized13b |> tableSummary 10 |> toHtml
         ]
 
 
@@ -277,6 +282,23 @@ gathered12a =
 gathered12b : Table
 gathered12b =
     gathered12a |> spread "element" "value"
+
+
+normalizedTables : ( Table, Table )
+normalizedTables =
+    normalize "id" [ "artist", "track", "time" ] tidy8
+
+
+normalized13a : Table
+normalized13a =
+    Tuple.first normalizedTables
+
+
+normalized13b : Table
+normalized13b =
+    Tuple.second normalizedTables
+        |> removeColumn "year"
+        |> removeColumn "week"
 
 
 
