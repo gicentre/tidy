@@ -307,7 +307,7 @@ produces a new table:
 |       64 |        sn |      f | 15-24 |
 ```
 
-If the colunn to disaggregate cannot be found, the original table is returned.
+If the column to disaggregate cannot be found, the original table is returned.
 
 -}
 disaggregate : String -> String -> List String -> Table -> Table
@@ -1003,7 +1003,7 @@ mapColumn heading fn tbl =
 {-| Move the column with the given name (first parameter) to become the last column
 in the given table (second parameter). While column order has no effect on table
 processing, this can be useful for display purposes. For example when separating
-variavbles that represent observation cateogries from those representing
+variables that represent observation categories from those representing
 observation measurements.
 -}
 moveColumnToEnd : String -> Table -> Table
@@ -1074,7 +1074,7 @@ produces a tuple containing the following two tables:
 | Eloise  | 45  | 1  |
 ```
 
-The process of separating a table into two can be reversed by applyiing a table
+The process of separating a table into two can be reversed by applying a table
 join, for example:
 
     let
