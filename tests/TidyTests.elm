@@ -128,6 +128,24 @@ z20,    z21, z22, z23
                 |> Tidy.insertColumn "col" [ "0", "1", "2", "3", "0", "1", "2", "3", "4", "0", "1", "2", "3", "0", "1" ]
                 |> Tidy.insertColumn "z" [ "z00", "z01", "z02", "z03", "z10", "z11", "z12", "z13", "extra", "z20", "z21", "z22", "z23", "", "" ]
 
+        raggedCSV =
+            """a,b,c,d
+        1,2,3,4
+        1,2,3
+        1,2
+        1
+        1,,
+        1,,,
+        1,,,,
+        1,,,,,,,,,,,,"""
+
+        raggedTable =
+            Tidy.empty
+                |> Tidy.insertColumn "a" (List.repeat 8 "1")
+                |> Tidy.insertColumn "b" (List.repeat 3 "2")
+                |> Tidy.insertColumn "c" (List.repeat 2 "3")
+                |> Tidy.insertColumn "d" (List.repeat 1 "4")
+
         table2 =
             Tidy.empty
                 |> Tidy.insertColumn "Treatment" [ "treatmenta", "treatmentb" ]
@@ -313,6 +331,9 @@ z20,    z21, z22, z23
             , test "TSV simple table" <|
                 \_ ->
                     table1TSV |> Expect.equal table1
+            , test "ragged CSV" <|
+                \_ ->
+                    Tidy.fromCSV raggedCSV |> Expect.equal raggedTable
             , test "Unruly CSV" <|
                 \_ ->
                     Tidy.fromCSV complexCSV |> Expect.equal complexTable

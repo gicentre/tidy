@@ -446,6 +446,7 @@ fromDelimited delimiter =
         >> transpose
         >> List.indexedMap Tuple.pair
         >> List.foldl addEntry Dict.empty
+        >> Dict.filter (\( _, hd ) _ -> hd /= "")
         >> toTable
 
 
@@ -724,8 +725,8 @@ innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
 {-| Add a column of data to a table. The first parameter is the name to give the
 column. The second is a list of column values. If the table already has a column
 with this name, it will get replaced with the given data. To ensure table rows are
-always aligned, if the table is not empty, the column values are padded / truncated
-to match the number of rows in the table.
+always aligned, if the table is not empty, the column values are padded to match
+the longest column in the table after insertion.
 -}
 insertColumn : String -> List String -> Table -> Table
 insertColumn heading colValues tbl =
@@ -1809,16 +1810,49 @@ tableColumns tbl =
 
 toTable : Columns -> Table
 toTable cols =
-    Table { columns = cols }
+    let
+        maxColSize =
+            cols
+                |> Dict.values
+                |> List.map List.length
+                |> List.maximum
+                |> Maybe.withDefault 0
+
+        padRight n col =
+            col ++ List.repeat (n - List.length col) ""
+
+        paddedCols =
+            Dict.map (\_ -> padRight maxColSize) cols
+    in
+    Table { columns = paddedCols }
 
 
-transpose : List (List a) -> List (List a)
-transpose xss =
+{-| This version will transpose complete column lists only.
+-}
+transposeComplete : List (List a) -> List (List a)
+transposeComplete xss =
     let
         numCols =
             List.head >> Maybe.withDefault [] >> List.length
     in
     List.foldr (List.map2 (::)) (List.repeat (numCols xss) []) xss
+
+
+{-| This version will transpose all column lists even if they are empty.
+-}
+transpose : List (List a) -> List (List a)
+transpose xss =
+    let
+        maxRows =
+            List.map List.length xss |> List.maximum |> Maybe.withDefault 0
+
+        padNothing maxLength list =
+            list ++ List.repeat (maxLength - List.length list) Nothing
+    in
+    List.foldr (List.map2 (::))
+        (List.repeat maxRows [])
+        (List.map (List.map Just >> padNothing maxRows) xss)
+        |> List.map (List.filterMap identity)
 
 
 
