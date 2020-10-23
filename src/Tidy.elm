@@ -11,6 +11,7 @@ module Tidy exposing
     , insertColumn
     , insertColumnFromJson
     , insertIndexColumn
+    , insertSetIndexColumn
     , removeColumn
     , mapColumn
     , filterColumns
@@ -62,6 +63,7 @@ module Tidy exposing
 @docs insertColumn
 @docs insertColumnFromJson
 @docs insertIndexColumn
+@docs insertSetIndexColumn
 @docs removeColumn
 @docs mapColumn
 @docs filterColumns
@@ -821,11 +823,83 @@ insertColumnFromJson key path json =
             identity
 
 
+{-| Add an index column to a table based on the partition of values in a given
+column into a minimum number of sets. The first parameter is the name to give the
+new column containing set index values (replacing an existing column if it shares
+the same name). The second is name of the column containing the values to be
+partitioned into sets. If the column name is not found, the original table is returned.
+
+For example given the following treatment table,
+
+```markdown
+| person       | treatment |
+| ------------ | --------- |
+| John Smith   | b         |
+| Jane Doe     | a         |
+| Jane Doe     | b         |
+| Mary Johnson | a         |
+| Mary Johnson | b         |
+```
+
+Applying `insertSetIndexColumn "id" "person"` would generate,
+
+```markdown
+| id | person       | treatment |
+| -- | ------------ | --------- |
+|  1 | John Smith   | b         |
+|  1 | Jane Doe     | a         |
+|  2 | Jane Doe     | b         |
+|  1 | Mary Johnson | a         |
+|  2 | Mary Johnson | b         |
+```
+
+Rows with a given id will all be unique. Creating a set index column can be useful
+when [spreading](#spread) a table maude up of a single pair of columns. For example,
+taking the treatment table and inserting a set ID before spreading,
+
+    treatmentTable
+        |> insertSetIndexColumn "id" "person"
+        |> spread "person" "treatment"
+
+generates the following table:
+
+```markdown
+| id | John Smith | Jane Doe | Mary Johnson |
+| -- | ---------- | -------- | ------------ |
+| 1  | b          | a        | a            |
+| 2  |            | b        | a            |
+```
+
+-}
+insertSetIndexColumn : String -> String -> Table -> Table
+insertSetIndexColumn idName setCol tbl =
+    case tableColumns tbl |> getColumn setCol of
+        Just colValues ->
+            let
+                addToFreqTable item ( ids, freqTable ) =
+                    case Dict.get item freqTable of
+                        Just f ->
+                            ( (f + 1) :: ids, Dict.insert item (f + 1) freqTable )
+
+                        Nothing ->
+                            ( 1 :: ids, Dict.insert item 1 freqTable )
+
+                groupIds =
+                    List.foldl addToFreqTable ( [], Dict.empty )
+                        >> Tuple.first
+                        >> List.reverse
+                        >> List.map String.fromInt
+            in
+            insertColumn idName (strColumn setCol tbl |> groupIds) tbl
+
+        Nothing ->
+            tbl
+
+
 {-| Add an index column to a table. The first parameter is the name to give the
-new column containing index values. The second is a prefix to add to each index
-value, useful for giving different tables different index values (or use `""` for
-no prefix). If the table already has a column with this name, it will be replaced
-with this index column.
+new column containing index values (replacing an existing column if it shares the
+same name). The second is a prefix to add to each index value, useful for giving
+different tables different index values (or use `""` for no prefix).
 
 Creating an index column can be useful when joining tables with keys that you wish
 to guarantee are unique for each row. For example, to combine the rows of two
@@ -946,7 +1020,7 @@ If one or both of the key columns are not found, the left table is returned.
 leftJoin : ( Table, String ) -> ( Table, String ) -> Table
 leftJoin ( t1, key1 ) ( t2, key2 ) =
     -- Check that the named keys are present in both tables
-    if not <| memberColumns key1 (tableColumns t1) && memberColumns key2 (tableColumns t2) then
+    if not (memberColumns key1 (tableColumns t1) && memberColumns key2 (tableColumns t2)) then
         t1
 
     else
@@ -1337,6 +1411,11 @@ above).
 Missing rows (e.g. `Aberdeen, 2018, minTemp` above) are rotated as empty strings
 in the spread column. If either of the columns to spread is not found, the original
 table is returned.
+
+Spreading effectively groups by values in the non-spreading columns. If the table
+to spread only contains the type and value columns, an empty table will be created
+as there are no values to group by. In these cases, adding an index column with
+[insertSetIndexColumn](#insertSetIndexColumn) can generate values to group by.
 
 -}
 spread : String -> String -> Table -> Table
