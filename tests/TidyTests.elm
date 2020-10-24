@@ -36,6 +36,22 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumnFromJson "treatment" [] json
                 |> Tidy.insertColumnFromJson "result" [] json
 
+        treatmentMinimal =
+            tidyTreatmentJson |> Tidy.removeColumn "result"
+
+        treatmentWithIds =
+            Tidy.empty
+                |> Tidy.insertColumn "id" [ "1", "1", "2", "1", "2" ]
+                |> Tidy.insertColumnFromJson "person" [] json
+                |> Tidy.insertColumnFromJson "treatment" [] json
+
+        spreadTreatmentWithIds =
+            Tidy.empty
+                |> Tidy.insertColumn "id" [ "1", "2" ]
+                |> Tidy.insertColumn "John Smith" [ "b", "" ]
+                |> Tidy.insertColumn "Jane Doe" [ "a", "b" ]
+                |> Tidy.insertColumn "Mary Johnson" [ "a", "b" ]
+
         tidyTreatment =
             Tidy.empty
                 |> Tidy.insertColumn "person" [ "John Smith", "Jane Doe", "Jane Doe", "Mary Johnson", "Mary Johnson" ]
@@ -489,6 +505,12 @@ z20,    z21, z22, z23
             , test "gatherTemperatures" <|
                 \_ ->
                     Tidy.gather "readingType" "temperature" [ ( "minTemp", "minTemp" ), ( "maxTemp", "maxTemp" ) ] spreadTable |> Expect.equal gatherTable
+            , test "insert set id" <|
+                \_ ->
+                    Tidy.insertSetIndexColumn "id" "person" treatmentMinimal |> Expect.equal (treatmentWithIds |> Tidy.moveColumnToEnd "id")
+            , test "spread after set id" <|
+                \_ ->
+                    Tidy.insertSetIndexColumn "id" "person" treatmentMinimal |> Tidy.spread "person" "treatment" |> Expect.equal spreadTreatmentWithIds
             ]
         , describe "normalization"
             [ test "normaizeRedundant1" <|
