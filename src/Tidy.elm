@@ -867,7 +867,7 @@ generates the following table:
 | id | John Smith | Jane Doe | Mary Johnson |
 | -- | ---------- | -------- | ------------ |
 | 1  | b          | a        | a            |
-| 2  |            | b        | a            |
+| 2  |            | b        | b            |
 ```
 
 -}
