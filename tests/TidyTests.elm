@@ -1,6 +1,6 @@
 module TidyTests exposing (suite)
 
-import Expect exposing (Expectation)
+import Expect
 import Test exposing (..)
 import Tidy
 
@@ -58,7 +58,7 @@ treatmentb, 2, 11, 1"""
                 |> Tidy.insertColumn "treatment" [ "b", "a", "b", "a", "b" ]
                 |> Tidy.insertColumn "result" [ "2", "16", "11", "3", "1" ]
 
-        -- Note: We need to use explict '\t's to represent tabs to avoid editor reformatting as spaces.
+        -- Note: We need to use explicit '\t's to represent tabs to avoid editor reformatting as spaces.
         table1TSV =
             """Treatment\tJohn Smith\tJane Doe\tMary Johnson
 treatmenta\t\t16\t3
@@ -353,6 +353,9 @@ z20,    z21, z22, z23
             , test "Unruly CSV" <|
                 \_ ->
                     Tidy.fromCSV complexCSV |> Expect.equal complexTable
+            , test "Unruly TSV" <|
+                \_ ->
+                    Tidy.fromDelimited '\t' complexTSV |> Expect.equal complexTable
             ]
         , describe "fromGrid"
             [ test "gridText" <|
@@ -368,7 +371,7 @@ z20,    z21, z22, z23
                 \_ ->
                     gridRowsRaggedTable |> Expect.equal gridTableRagged
             ]
-        , describe "programaticTables"
+        , describe "programmaticTables"
             [ test "addingColumns" <|
                 \_ ->
                     table1CSV |> Expect.equal table2
@@ -396,7 +399,7 @@ z20,    z21, z22, z23
                 \_ ->
                     Tidy.leftJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal jTable1SameKey
             ]
-        , describe "rightjoins"
+        , describe "rightJoins"
             [ test "rightJoinDiffKey" <|
                 \_ ->
                     Tidy.rightJoin ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal rjTableDiffKey
@@ -413,7 +416,7 @@ z20,    z21, z22, z23
                 \_ ->
                     Tidy.rightJoin ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal jTable2SameKey
             ]
-        , describe "innerjoins"
+        , describe "innerJoins"
             [ test "innerJoinDiffKey" <|
                 \_ ->
                     Tidy.innerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ijTable
@@ -430,7 +433,7 @@ z20,    z21, z22, z23
                 \_ ->
                     Tidy.innerJoin "NewKey" ( jTable1SameKey, "Key" ) ( jTable2SameKey, "Unmatched" ) |> Expect.equal Tidy.empty
             ]
-        , describe "outerjoins"
+        , describe "outerJoins"
             [ test "outerJoinDiffKey" <|
                 \_ ->
                     Tidy.outerJoin "NewKey" ( jTable1DiffKey, "Key1" ) ( jTable2DiffKey, "Key2" ) |> Expect.equal ojTable
@@ -486,7 +489,7 @@ z20,    z21, z22, z23
             , test "identityMap" <|
                 \_ ->
                     Tidy.mapColumn "colB" identity jTable1SameKey |> Expect.equal jTable1SameKey
-            , test "missingcol" <|
+            , test "missingCol" <|
                 \_ ->
                     Tidy.mapColumn "nonExistentColumn" (always "Should never happen") jTable2DiffKey |> Expect.equal jTable2DiffKey
             ]
@@ -513,22 +516,22 @@ z20,    z21, z22, z23
                     Tidy.insertSetIndexColumn "id" "person" treatmentMinimal |> Tidy.spread "person" "treatment" |> Expect.equal spreadTreatmentWithIds
             ]
         , describe "normalization"
-            [ test "normaizeRedundant1" <|
+            [ test "normalizeRedundant1" <|
                 \_ ->
                     Tidy.normalize "id" [ "animal", "name", "age" ] redundantTable |> Expect.equal ( keyTable, valueTable )
-            , test "normaizeRedundant2" <|
+            , test "normalizeRedundant2" <|
                 \_ ->
                     Tidy.normalize "id" [ "name", "animal", "age" ] redundantTable |> Expect.equal ( keyTable, valueTable )
-            , test "normaizeRedundant3" <|
+            , test "normalizeRedundant3" <|
                 \_ ->
                     Tidy.normalize "id" [ "age", "name", "animal" ] redundantTable |> Expect.equal ( keyTable, valueTable )
-            , test "normaizeRedundantNoKeys" <|
+            , test "normalizeRedundantNoKeys" <|
                 \_ ->
                     Tidy.normalize "id" [] redundantTable |> Expect.equal ( Tidy.empty, redundantTable )
-            , test "normaizeRedundantNoValidKeys" <|
+            , test "normalizeRedundantNoValidKeys" <|
                 \_ ->
                     Tidy.normalize "id" [ "x", "y", "z" ] redundantTable |> Expect.equal ( Tidy.empty, redundantTable )
-            , test "normaizeAndJoin" <|
+            , test "normalizeAndJoin" <|
                 \_ ->
                     let
                         ( kt, vt ) =

@@ -399,7 +399,7 @@ filterRows columnName fn tbl =
             if List.member False keeps then
                 tbl
                     |> tableColumns
-                    |> Dict.map (\k -> List.map2 maybeCell keeps >> List.filterMap identity)
+                    |> Dict.map (\_ -> List.map2 maybeCell keeps >> List.filterMap identity)
                     |> toTable
 
             else
@@ -645,7 +645,7 @@ gather typeName valueName colVars table =
         ( gatheredCols, ungatheredCols ) =
             table
                 |> tableColumns
-                |> Dict.partition (\( _, colName ) v -> List.member colName gatheredColNames)
+                |> Dict.partition (\( _, colName ) _ -> List.member colName gatheredColNames)
 
         valueColumn =
             List.map
@@ -713,9 +713,6 @@ innerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
 
             t2 =
                 oldT2 |> renameColumn key2 keyName
-
-            lJoin =
-                leftJoin ( t1, keyName ) ( t2, keyName )
 
             t2Keys =
                 getColumn keyName (tableColumns t2) |> Maybe.withDefault []
@@ -819,7 +816,7 @@ insertColumnFromJson key path json =
                     |> List.reverse
                 )
 
-        Err msg ->
+        Err _ ->
             identity
 
 
@@ -874,7 +871,7 @@ generates the following table:
 insertSetIndexColumn : String -> String -> Table -> Table
 insertSetIndexColumn idName setCol tbl =
     case tableColumns tbl |> getColumn setCol of
-        Just colValues ->
+        Just _ ->
             let
                 addToFreqTable item ( ids, freqTable ) =
                     case Dict.get item freqTable of
@@ -1272,7 +1269,7 @@ outerJoin keyName ( oldT1, key1 ) ( oldT2, key2 ) =
                     (\s -> not <| List.member s (getColumn keyName leftColumns |> Maybe.withDefault []))
                     rightTable
         in
-        Dict.map (\( n, k ) v -> v ++ (getColumn k (tableColumns diff) |> Maybe.withDefault [])) leftColumns
+        Dict.map (\( _, k ) v -> v ++ (getColumn k (tableColumns diff) |> Maybe.withDefault [])) leftColumns
             |> toTable
 
 
@@ -1420,7 +1417,7 @@ as there are no values to group by. In these cases, adding an index column with
 -}
 spread : String -> String -> Table -> Table
 spread columnName valueName tbl =
-    -- Check that both spread columms are present
+    -- Check that both spread columns are present
     if not <| memberColumns columnName (tableColumns tbl) && memberColumns valueName (tableColumns tbl) then
         tbl
 
@@ -1635,10 +1632,6 @@ with later repeated ones.
 -}
 transposeTable : String -> String -> Table -> Table
 transposeTable headingColumn rowName tbl =
-    let
-        colToList heading columns =
-            heading :: (Dict.get heading columns |> Maybe.withDefault [])
-    in
     case getColumn headingColumn (tableColumns tbl) of
         Just newHeadings ->
             let
@@ -1714,19 +1707,6 @@ type JsVal
 
 
 
-{- Provides the first row of values for each column in the table. -}
-
-
-columnsHead : Columns -> List ( Heading, Cell )
-columnsHead columns =
-    if (columns |> Dict.values |> List.head |> Maybe.withDefault []) == [] then
-        []
-
-    else
-        Dict.foldl (\k v -> (::) ( k, List.head v |> Maybe.withDefault "" )) [] columns
-
-
-
 {- Finds the column index number of the column with the given name, if it exists -}
 
 
@@ -1738,11 +1718,6 @@ columnIndex colName =
         >> Maybe.map Tuple.first
 
 
-columnsTail : Columns -> Columns
-columnsTail =
-    Dict.map (always (List.drop 1))
-
-
 
 {- Re-compute column indices from 0 to (numCols-1) while preserving current order. -}
 
@@ -1752,26 +1727,6 @@ compactIndices startIndex =
     Dict.foldl
         (\( _, colHeading ) v acc -> Dict.insert ( startIndex + Dict.size acc, colHeading ) v acc)
         Dict.empty
-
-
-
-{- Select rows from a table whose values in the given columns (first parameter)
-   are distinct in combination. The resulting table will only consist of the given
-   columns. Useful for normalizing a table with redundant columns that can be
-   replaced with a key id.
--}
-
-
-filterDistinct : List String -> Table -> Table
-filterDistinct cols tbl =
-    tableColumns tbl
-        |> Dict.filter (\( _, name ) _ -> List.member name cols)
-        |> Dict.values
-        |> transpose
-        |> unique
-        |> transpose
-        |> List.map2 Tuple.pair cols
-        |> List.foldl (\( name, vals ) -> insertColumn name vals) empty
 
 
 flip : (a -> b -> c) -> b -> a -> c
@@ -1904,17 +1859,6 @@ toTable cols =
             Dict.map (\_ -> padRight maxColSize) cols
     in
     Table { columns = paddedCols }
-
-
-{-| This version will transpose complete column lists only.
--}
-transposeComplete : List (List a) -> List (List a)
-transposeComplete xss =
-    let
-        numCols =
-            List.head >> Maybe.withDefault [] >> List.length
-    in
-    List.foldr (List.map2 (::)) (List.repeat (numCols xss) []) xss
 
 
 {-| This version will transpose all column lists even if they are empty.

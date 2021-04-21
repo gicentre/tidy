@@ -49,11 +49,6 @@ parseWith separator lines =
     }
 
 
-split : String -> List (List String)
-split =
-    splitWith ","
-
-
 splitWith : String -> String -> List (List String)
 splitWith separator lines =
     let
@@ -62,11 +57,6 @@ splitWith separator lines =
                 |> List.filter (\x -> not (String.isEmpty x))
     in
     List.map (splitLineWith separator) values
-
-
-splitLine : String -> List String
-splitLine =
-    splitLineWith ","
 
 
 splitLineWith : String -> String -> List String
@@ -82,9 +72,6 @@ parseRemaining separator quoted remaining done =
 
     else if separator /= "" && not quoted && String.startsWith separator remaining then
         let
-            newQuoted =
-                False
-
             nextChars =
                 String.dropLeft (String.length separator) remaining
         in
