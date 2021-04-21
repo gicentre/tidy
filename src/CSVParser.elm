@@ -1,13 +1,7 @@
-module CSVParser exposing (parse, parseDelimited)
+module CSVParser exposing (parseDelimited)
 
 {-| Adapted from <https://github.com/lovasoa/elm-csv>
 -}
-
-
-parse : String -> List (List String)
-parse =
-    parseWith ","
-        >> mergeWithHeaders
 
 
 parseDelimited : Char -> String -> List (List String)
