@@ -822,8 +822,8 @@ insertColumnFromJson key path json =
 
 {-| Add an index column to a table based on the partition of values in a given
 column into a minimum number of sets. The first parameter is the name to give the
-new column containing set index values (replacing an existing column if it shares
-the same name). The second is name of the column containing the values to be
+new column containing set index values, replacing an existing column if it shares
+the same name. The second is the name of the column containing the values to be
 partitioned into sets. If the column name is not found, the original table is returned.
 
 For example given the following treatment table,
@@ -851,7 +851,7 @@ Applying `insertSetIndexColumn "id" "person"` would generate,
 ```
 
 Rows with a given id will all be unique. Creating a set index column can be useful
-when [spreading](#spread) a table maude up of a single pair of columns. For example,
+when [spreading](#spread) a table made up of a single pair of columns. For example,
 taking the treatment table and inserting a set ID before spreading,
 
     treatmentTable
